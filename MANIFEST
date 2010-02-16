@@ -2,7 +2,7 @@ Changes
 MANIFEST
 Makefile.PL
 README
-lib/Business/OnlinePayment/Litle.pm
+Litle.pm
 t/00-load.t
 t/pod-coverage.t
 t/pod.t
