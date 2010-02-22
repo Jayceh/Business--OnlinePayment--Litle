@@ -7,6 +7,7 @@ use Business::OnlinePayment;
 use Business::OnlinePayment::HTTPS;
 use vars qw(@ISA $me $DEBUG $VERSION);
 use XML::Writer;
+use XML::Simple;
 use Tie::IxHash;
 use Data::Dumper;
 
@@ -47,9 +48,9 @@ sub set_defaults {
     my $self = shift;
     my %opts = @_;
 
-    $self->server('jaycehall.com') unless $self->server;
+    $self->server('cert.litle.com') unless $self->server;
     $self->port('443') unless $self->port;
-    $self->path('/somewhere/to/post') unless $self->path;
+    $self->path('/vap/communicator/online') unless $self->path;
 
     if ( $opts{debug} ) {
         $self->debug( $opts{debug} );
@@ -65,7 +66,7 @@ sub set_defaults {
     }
 
     $self->build_subs(qw( order_number md5 avs_code cvv2_response
-                          cavv_response api_version xmlns
+                          cavv_response api_version xmlns 
                      ));
 
     $self->api_version('7.2') unless $self->api_version;
@@ -95,13 +96,24 @@ sub map_fields {
     );
     $content{'TransactionType'} = $actions{$action} || $action;
 
+    $content{'company_phone'} =~ s/\D//g;
+
+    my %types = (
+        visa    =>  'VI',
+        mastercard  =>  'MC',
+        'american express'  =>  'AX',
+        discover    =>  'DI',
+        'diners club'   =>  'DC',
+        jcb     =>  'JC',
+    );
+    $content{'type'} = $types{lc($content{'type'})} || $content{'type'};
         
     if ($content{recurring_billing} && $content{recurring_billing} eq 'YES' ){
         $content{'orderSource'} = 'recurring';
     } else {
         $content{'orderSource'} = 'ecommerce';
     }
-    $content{'customerType'} =  $content{'orderSource'} eq 'recurring' ? 'E' : 'N'; # new/Existing
+    $content{'customerType'} =  $content{'orderSource'} eq 'recurring' ? 'Existing' : 'New'; # new/Existing
 
 
     $content{'deliverytype'} = 'SVC';
@@ -163,66 +175,139 @@ sub submit {
         customerType    =>  'customerType',
     );
 
+    my $description  = substr( $content{'description'},0,25 ); # schema req
+
     tie my %custombilling, 'Tie::IxHash', 
     $self->revmap_fields(
-        descriptor  =>  'description',
-        url         =>  'url',
         phone       =>  'company_phone',
+        descriptor  =>  \$description,
     );
 
     ## loop through product list and generate linItemData for each
+    #
+    my @products = ();
+    foreach my $prod ( @{$content{'products'}}){
+        tie my %lineitem, 'Tie::IxHash', 
+        $self->revmap_fields(
+            content =>  $prod,
+            itemSequenceNumber  =>  'itemSequenceNumber',
+            itemDescription =>  'description',
+            productCode =>  'code',
+            quantity    =>  'quantity',
+            unitOfMeasure   =>  'units',
+            taxAmount   =>  'tax',
+            lineItemTotal   =>  'amount',
+            lineItemTotalWithTax    =>  'totalwithtax',
+            itemDiscountAmount  =>  'discount',
+            commodityCode   =>  'commoditycode',
+            unitCost    =>  'cost',
+        );
+        push @products, \%lineitem;
+    }
+    #
+    #
     tie my %enhanceddata, 'Tie::IxHash', 
     $self->revmap_fields(
             orderDate   =>  'orderdate',
             salesTax    =>  'salestax',
             invoiceReferenceNumber  =>  'invoice_number', ##
-            deliveryType    =>  'deliverytype',
+            lineItemData    =>  \@products,
             customerReference   =>  'po_number',
-            lineItemData    =>  $content{'products'},
     );
+
+    tie my %card, 'Tie::IxHash',
+        $self->revmap_fields(
+            type    =>  'type',
+            number  =>  'card_number',
+            expDate =>  'expiration',
+            cardValidationNum   =>  'cvv2',
+        );
 
     tie my %req, 'Tie::IxHash', 
         $self->revmap_fields(
-            orderID     =>  'invoice_number',
-            card        =>  'card_number',
-            orderSource =>  'orderSource',
+            orderId     =>  'invoice_number',
             amount      =>  \$amount,
-            billToAddress   =>  \%billToAddress,
-            authentication  => \%authentication,
+            orderSource =>  'orderSource',
             customerInfo    =>  \%customerinfo,
+            billToAddress   =>  \%billToAddress,
+            card            =>  \%card,
             customBilling   =>  \%custombilling,
             enhancedData    =>  \%enhanceddata,
         );
 
 
-        warn Dumper( \%req ) if $DEBUG;
+        #warn Dumper( \%req ) if $DEBUG;
     ## Start the XML Document, parent tag
     $writer->xmlDecl();
     $writer->startTag("litleOnlineRequest",
         version => $self->api_version,
         xmlns => $self->xmlns,
-        merchantId => 'someaccount'
+        merchantId => $content{'merchantid'}, 
     );
 
+    $self->_xmlwrite($writer, 'authentication', \%authentication);
+$writer->startTag("authorization", id => '1', reportGroup =>"Test", customerId=>"1");
     foreach ( keys ( %req ) ) { 
         $self->_xmlwrite($writer, $_, $req{$_});
     }
 
+    $writer->endTag("authorization");
     $writer->endTag("litleOnlineRequest");
     $writer->end();
     ## END XML Generation
 
-    warn "$post_data\n" if $DEBUG;
+    # warn "$post_data\n" if $DEBUG;
 
     my ($page,$server_response,%headers) = $self->https_post($post_data);
+    
+    #warn Dumper $page, $server_response, \%headers if $DEBUG;
+    
+  my $response = {};
+  if ($server_response =~ /^200/){
+    $response = XMLin($page);
+    if ( exists($response->{'response'}) && $response->{'response'} == 1)) {
+      ## parse error type error
+      $self->error_message($response->{'message'});
+      return;
+    }else{
+      $self->error_message($response->{'message'});
+    }
+  } 
+  warn Dumper( $response );
 
-    warn "$page\n" if $DEBUG;
+  ## Set up the data:
+  my $resp = $response->{'authorizationResponse'};
+  $self->order_number( $resp->{'litleTxnId'} || '');
+  $self->result_code( $resp->{'response'} || '');
+  $self->authorization( $resp->{'authCode'} || '');
+  $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult' || '');
+  $self->avs_code( $resp->{'fraudResult'}->{'avsResult' || '');
+
+  $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
+
+  unless ( $self->is_success() ) {
+      unless ( $self->error_message()) {
+          $self->error_message(
+              "(HTTPS response: $server_response) ".
+              "(HTTPS headers: ".
+                join(", ", map { "$_ => ". $headers{$_} } keys %headers ). ") ".
+              "(Raw HTTPS content: $page)"
+          );
+      }
+  }
+
 }
 
 sub revmap_fields {
   my $self = shift;
   tie my(%map), 'Tie::IxHash', @_;
-  my %content = $self->content();
+  my %content;
+  if($map{'content'} && ref($map{'content'}) eq 'HASH'){
+      %content = %{ delete($map{'content'}) };
+  }else{
+      %content =$self->content();
+  }
+
   map {
         my $value;
         if ( ref( $map{$_} ) eq 'HASH' ) {
