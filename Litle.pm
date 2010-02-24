@@ -13,7 +13,7 @@ use Data::Dumper;
 
 @ISA = qw(Business::OnlinePayment::HTTPS);
 $me = 'Business::OnlinePayment::Litle';
-$DEBUG = 1;
+$DEBUG = 0;
 $VERSION = '0.01';
 
 =head1 NAME
@@ -133,8 +133,11 @@ sub submit {
     $self->is_success(0);
     $self->map_fields;
     my %content = $self->content();
+    my $action = $content{'TransactionType'};
 
+    my @required_fields = qw(action login type);
 
+    $self->required_fields(@required_fields);
     my $post_data;
     my $writer = new XML::Writer( OUTPUT        => \$post_data,
                                   DATA_MODE     => 1,
@@ -223,18 +226,51 @@ sub submit {
             cardValidationNum   =>  'cvv2',
         );
 
-    tie my %req, 'Tie::IxHash', 
-        $self->revmap_fields(
-            orderId     =>  'invoice_number',
-            amount      =>  \$amount,
-            orderSource =>  'orderSource',
-            customerInfo    =>  \%customerinfo,
-            billToAddress   =>  \%billToAddress,
-            card            =>  \%card,
-            customBilling   =>  \%custombilling,
-            enhancedData    =>  \%enhanceddata,
-        );
+    my %req;
 
+    if( $action eq 'sale' 
+     || $action eq 'authorization' ){
+        tie %req, 'Tie::IxHash', 
+            $self->revmap_fields(
+                orderId     =>  'invoice_number',
+                amount      =>  \$amount,
+                orderSource =>  'orderSource',
+                customerInfo    =>  \%customerinfo,
+                billToAddress   =>  \%billToAddress,
+                card            =>  \%card,
+                customBilling   =>  \%custombilling,
+                enhancedData    =>  \%enhanceddata,
+            );
+    }
+    elsif( $action eq 'capture' ){
+        push @required_fields, qw( order_number amount );
+        tie %req, 'Tie::IxHash', 
+            $self->revmap_fields(
+                litleTxnId  =>  'order_number',
+                amount      =>  \$amount,
+                enhancedData    =>  \%enhanceddata,
+            );
+    }
+    elsif( $action eq 'credit' ){
+        push @required_fields, qw( order_number amount );
+        tie %req, 'Tie::IxHash', 
+            $self->revmap_fields(
+                litleTxnId  =>  'order_number',
+                amount      =>  \$amount,
+                customBilling   =>  \%custombilling,
+                enhancedData    =>  \%enhanceddata,
+                #bypassVelocityCheck => Not supported yet
+            );
+    }
+    elsif( $action eq 'void' ){
+        push @required_fields, qw( order_number );
+        tie %req, 'Tie::IxHash', 
+            $self->revmap_fields(
+                litleTxnId  =>  'order_number',
+            );
+    }
+
+    $self->required_fields(@required_fields);
 
         #warn Dumper( \%req ) if $DEBUG;
     ## Start the XML Document, parent tag
@@ -246,42 +282,43 @@ sub submit {
     );
 
     $self->_xmlwrite($writer, 'authentication', \%authentication);
-$writer->startTag("authorization", id => '1', reportGroup =>"Test", customerId=>"1");
+    $writer->startTag($content{'TransactionType'}, id => $content{'invoice_number'}, reportGroup =>"Test", customerId=>"1");
     foreach ( keys ( %req ) ) { 
         $self->_xmlwrite($writer, $_, $req{$_});
     }
 
-    $writer->endTag("authorization");
+    $writer->endTag($content{'TransactionType'});
     $writer->endTag("litleOnlineRequest");
     $writer->end();
     ## END XML Generation
 
-    # warn "$post_data\n" if $DEBUG;
+    warn "$post_data\n" if $DEBUG;
 
     my ($page,$server_response,%headers) = $self->https_post($post_data);
     
-    #warn Dumper $page, $server_response, \%headers if $DEBUG;
+    warn Dumper $page, $server_response, \%headers if $DEBUG;
     
   my $response = {};
   if ($server_response =~ /^200/){
     $response = XMLin($page);
-    if ( exists($response->{'response'}) && $response->{'response'} == 1)) {
+    if ( exists($response->{'response'}) && $response->{'response'} == 1) {
       ## parse error type error
+      print Dumper( $response, $post_data );
       $self->error_message($response->{'message'});
       return;
     }else{
-      $self->error_message($response->{'message'});
+      $self->error_message($response->{$content{'TransactionType'} . 'Response'}->{'message'});
     }
   } 
-  warn Dumper( $response );
+  warn Dumper( $response ) if $DEBUG;
 
   ## Set up the data:
-  my $resp = $response->{'authorizationResponse'};
+  my $resp = $response->{ $content{'TransactionType'} . 'Response'};
   $self->order_number( $resp->{'litleTxnId'} || '');
-  $self->result_code( $resp->{'response'} || '');
-  $self->authorization( $resp->{'authCode'} || '');
-  $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult' || '');
-  $self->avs_code( $resp->{'fraudResult'}->{'avsResult' || '');
+  $self->result_code( $resp->{'response'}    || '');
+  $self->authorization( $resp->{'authCode'}  || '');
+  $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult'} || '');
+  $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '');
 
   $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
 
