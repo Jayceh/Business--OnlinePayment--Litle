@@ -9,6 +9,7 @@ use vars qw(@ISA $me $DEBUG $VERSION);
 use XML::Writer;
 use XML::Simple;
 use Tie::IxHash;
+use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 
 @ISA = qw(Business::OnlinePayment::HTTPS);
@@ -98,15 +99,17 @@ sub map_fields {
 
     $content{'company_phone'} =~ s/\D//g;
 
-    my %types = (
-        visa    =>  'VI',
-        mastercard  =>  'MC',
-        'american express'  =>  'AX',
-        discover    =>  'DI',
-        'diners club'   =>  'DC',
-        jcb     =>  'JC',
-    );
-    $content{'type'} = $types{lc($content{'type'})} || $content{'type'};
+    my $type_translate = {
+        'VISA card'                   => 'VI',
+        'MasterCard'                  => 'MC',
+        'Discover card'               => 'DI',
+        'American Express card'       => 'AX',
+        'Diner\'s Club/Carte Blanche' => 'DI',
+        'JCB'                         => 'DI',
+        'China Union Pay'             => 'DI',
+    };
+    
+    $content{'card_type'} = $type_translate->{ cardtype($content{'card_number'})} || $content{'type'};
         
     if ($content{recurring_billing} && $content{recurring_billing} eq 'YES' ){
         $content{'orderSource'} = 'recurring';
@@ -220,7 +223,7 @@ sub submit {
 
     tie my %card, 'Tie::IxHash',
         $self->revmap_fields(
-            type    =>  'type',
+            type    =>  'card_type',
             number  =>  'card_number',
             expDate =>  'expiration',
             cardValidationNum   =>  'cvv2',

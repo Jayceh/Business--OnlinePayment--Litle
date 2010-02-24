@@ -75,17 +75,6 @@ my $voidable_amount = 0;
 
 
 ### Litle AUTH Tests
-#
-#      'auth_response' => [
-#                               {
-#                                 'Response Code' => '000',
-#                                 'OrderId' => '1',
-#                                 'AVS Result' => '01',
-#                                 'Message' => 'Approved',
-#                                 'Authentication Result' => '',
-#                                 'Auth Code' => '111111',
-#                                 'Card Validation Result' => 'M'
-#                               },
 print '-'x70;
 print "AUTH TESTS\n";
 my %auth_resp = ();
@@ -241,7 +230,6 @@ foreach my $account ( @{$data->{'account'}} ){
 
     ## get the response validation set for this order
     my ($resp_validation) = grep { $_->{'OrderID'} ==  $account->{'OrderId'} } @{ $data->{'void_response'} };
-    print Dumper($content{'order_number'});
     {
         my $tx = Business::OnlinePayment->new("Litle", @opts);
         $tx->content(%content);
@@ -256,6 +244,32 @@ foreach my $account ( @{$data->{'account'}} ){
     }
 }
 
+
+print '-'x70;
+print "Response Codes\n";
+
+foreach my $account ( @{$data->{'response_codes'}} ){
+    $content{'action'} = 'Authorization Only';
+    $content{'amount'} = '50.00';
+    $content{'invoice_number'} = time;
+    $content{'card_number'} = $account->{'Account Number'};
+    $content{'type'} = 'CC';
+
+    ## get the response validation set for this order
+    {
+        my $tx = Business::OnlinePayment->new("Litle", @opts);
+        $tx->content(%content);
+        $account->{'Approval Code'} = undef if $account->{'Approval Code'} eq 'NA';
+        tx_check(
+            $tx,
+            desc          => "valid card_number",
+            is_success    => $account->{'Message'} eq 'Approved' ? 1 : 0,
+            result_code   => $account->{'Response Code'},
+            error_message => $account->{'Message'},
+            authorization => $account->{'Approval Code'},
+        );
+    }
+}
 
 sub tx_check {
     my $tx = shift;
