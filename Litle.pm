@@ -39,7 +39,7 @@ Perhaps a little code snippet.
     my $foo = Business::OnlinePayment::Litle->new();
     ...
 
-=head1 FUNCTIONS
+=head1 FUub CTIONS
 
 =head2 set_defaults
 
@@ -118,6 +118,7 @@ sub map_fields {
     }
     $content{'customerType'} =  $content{'orderSource'} eq 'recurring' ? 'Existing' : 'New'; # new/Existing
 
+    $content{'expiration'} =~ s/\D+//g;
 
     $content{'deliverytype'} = 'SVC';
     # stuff it back into %content
@@ -227,6 +228,15 @@ sub submit {
             number  =>  'card_number',
             expDate =>  'expiration',
             cardValidationNum   =>  'cvv2',
+            cardAuthentication  =>  '3ds',  # is this what we want to name it?
+        );
+
+    tie my %cardholderauth, 'Tie::IxHash',
+        $self->revmap_fields(
+            authenticationValue =>  '3ds',
+            authenticationTransactionId =>  'visaverified',
+            customerIpAddress   =>  'ip',
+            authenticatedByMerchant =>  'authenticated',
         );
 
     my %req;
@@ -241,6 +251,7 @@ sub submit {
                 customerInfo    =>  \%customerinfo,
                 billToAddress   =>  \%billToAddress,
                 card            =>  \%card,
+                #cardholderAuthentication    =>  \%cardholderauth,
                 customBilling   =>  \%custombilling,
                 enhancedData    =>  \%enhanceddata,
             );
@@ -295,9 +306,10 @@ sub submit {
     $writer->end();
     ## END XML Generation
 
-    warn "$post_data\n" if $DEBUG;
 
     my ($page,$server_response,%headers) = $self->https_post($post_data);
+    $self->{'_post_data'} = $post_data;
+    warn $self->{'_post_data'} if $DEBUG;
     
     warn Dumper $page, $server_response, \%headers if $DEBUG;
     
@@ -306,7 +318,7 @@ sub submit {
     $response = XMLin($page);
     if ( exists($response->{'response'}) && $response->{'response'} == 1) {
       ## parse error type error
-      print Dumper( $response, $post_data );
+      print Dumper( $response, $self->{'_post_data'} );
       $self->error_message($response->{'message'});
       return;
     }else{

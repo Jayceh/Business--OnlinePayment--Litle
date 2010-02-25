@@ -15,14 +15,14 @@ my $data = retrieve('t/data.str');
 use Data::Dumper;
 print Dumper( keys %{$data} );
 
-#plan tests => 43;
+#plan tests => 319;
   
 use_ok 'Business::OnlinePayment';
-ok( $login );
-ok( $password );
-ok( $merchantid );
+ok( $login, 'Supplied a Login' );
+ok( $password, 'Supplied a Password' );
+like( $merchantid, qr/^\d+/, 'MerchantID');
 
-my %content = (
+my %orig_content = (
     type           => 'VISA',
     login          => $login,
     password       => $password,
@@ -45,6 +45,7 @@ my %content = (
     company_phone   => '801.123-4567',
     url             =>  'support.foo.com',
     invoice_number  => '1234',
+    ip              =>  '127.0.0.1',
     products        =>  [
     {   description =>  'First Product',
         sku         =>  'sku',
@@ -68,12 +69,7 @@ my %content = (
     ],
 );
 
-my $voidable;
-my $voidable_auth;
-my $voidable_amount = 0;
-
-
-
+my %content = %orig_content;
 ### Litle AUTH Tests
 print '-'x70;
 print "AUTH TESTS\n";
@@ -97,13 +93,12 @@ foreach my $account ( @{$data->{'account'}} ){
     $content{'zip'} = $address->{'Zip'};
 
     my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'auth_response'} };
-    #print Dumper(\%content);
     {
         my $tx = Business::OnlinePayment->new("Litle", @opts);
         $tx->content(%content);
         tx_check(
             $tx,
-            desc          => "valid card_number",
+            desc          => "Auth Only",
             is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
             result_code   => $resp_validation->{'Response Code'},
             error_message => $resp_validation->{'Message'},
@@ -113,15 +108,13 @@ foreach my $account ( @{$data->{'account'}} ){
         );
 
         $auth_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
-        $voidable = $tx->order_number if $tx->is_success;
-        $voidable_auth = $tx->authorization if $tx->is_success;
-        $voidable_amount = $content{amount} if $tx->is_success;
     }
 }
 
 print '-'x70;
 print "SALE\n";
 my %sale_resp = ();
+%content = %orig_content;
 
 foreach my $account ( @{$data->{'account'}} ){
     $content{'action'} = 'Normal Authorization';
@@ -149,7 +142,7 @@ foreach my $account ( @{$data->{'account'}} ){
         $tx->content(%content);
         tx_check(
             $tx,
-            desc          => "valid card_number",
+            desc          => "Sale Order",
             is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
             result_code   => $resp_validation->{'ResponseCode'},
             error_message => $resp_validation->{'Message'},
@@ -165,6 +158,7 @@ print '-'x70;
 print "CAPTURE\n";
 
 my %cap_resp = ();
+%content = %orig_content;
 
 foreach my $account ( @{$data->{'account'}} ){
     next if $account->{'OrderId'} > 5; #can only capture first 5
@@ -181,7 +175,7 @@ foreach my $account ( @{$data->{'account'}} ){
         $tx->content(%content);
         tx_check(
             $tx,
-            desc          => "valid card_number",
+            desc          => "Capture",
             is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
             result_code   => $resp_validation->{'ResponseCode'},
             error_message => $resp_validation->{'Message'},
@@ -193,6 +187,7 @@ foreach my $account ( @{$data->{'account'}} ){
 print '-'x70;
 print "CREDIT\n";
 
+%content = %orig_content;
 #$content{'order_number'} = $sale_resp{ $account->{'OrderId'} } if $account->{'OrderId'} == 6;
 foreach my $account ( @{$data->{'account'}} ){
     next if $account->{'OrderId'} > 5;
@@ -209,7 +204,7 @@ foreach my $account ( @{$data->{'account'}} ){
         $tx->content(%content);
         tx_check(
             $tx,
-            desc          => "valid card_number",
+            desc          => "Credits",
             is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
             result_code   => $resp_validation->{'ResponseCode'},
             error_message => $resp_validation->{'Message'},
@@ -220,6 +215,7 @@ foreach my $account ( @{$data->{'account'}} ){
 print '-'x70;
 print "VOID\n";
 
+%content = %orig_content;
 foreach my $account ( @{$data->{'account'}} ){
     next if $account->{'OrderId'} > 5;
     $content{'action'} = 'Void';
@@ -233,10 +229,9 @@ foreach my $account ( @{$data->{'account'}} ){
     {
         my $tx = Business::OnlinePayment->new("Litle", @opts);
         $tx->content(%content);
-        local $Business::OnlinePayment::Litle::Debug = 4;
         tx_check(
             $tx,
-            desc          => "valid card_number",
+            desc          => "Void",
             is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
             result_code   => $resp_validation->{'Response Code'},
             error_message => $resp_validation->{'Message'},
@@ -248,7 +243,40 @@ foreach my $account ( @{$data->{'account'}} ){
 print '-'x70;
 print "Response Codes\n";
 
+%content = %orig_content;
 foreach my $account ( @{$data->{'response_codes'}} ){
+    $content{'action'} = 'Authorization Only';
+    $content{'amount'} = '50.00';
+    $content{'invoice_number'} = time;
+    $content{'card_number'} = $account->{'Account Number'};
+    $content{'type'} = 'CC';
+
+    #### exp date hack for response, this one test requires it
+    if( $account->{'Account Number'} eq '4457000200000008'){
+        $content{'expiration'} = '21/20'; #impossible, but formatted correctly date
+    }
+
+    ## get the response validation set for this order
+    {
+        my $tx = Business::OnlinePayment->new("Litle", @opts);
+        $tx->content(%content);
+        $account->{'Approval Code'} = undef if $account->{'Approval Code'} eq 'NA';
+        tx_check(
+            $tx,
+            desc          => "Response Codes",
+            is_success    => $account->{'Message'} eq 'Approved' ? 1 : 0,
+            result_code   => $account->{'Response Code'},
+            error_message => $account->{'Message'},
+            authorization => $account->{'Approval Code'},
+        );
+    }
+}
+
+print '-'x70;
+print "AVS/Validation Tests\n";
+
+%content = %orig_content;
+foreach my $account ( @{$data->{'avs_validation'}} ){
     $content{'action'} = 'Authorization Only';
     $content{'amount'} = '50.00';
     $content{'invoice_number'} = time;
@@ -259,18 +287,55 @@ foreach my $account ( @{$data->{'response_codes'}} ){
     {
         my $tx = Business::OnlinePayment->new("Litle", @opts);
         $tx->content(%content);
-        $account->{'Approval Code'} = undef if $account->{'Approval Code'} eq 'NA';
         tx_check(
             $tx,
-            desc          => "valid card_number",
-            is_success    => $account->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $account->{'Response Code'},
-            error_message => $account->{'Message'},
-            authorization => $account->{'Approval Code'},
+            desc          => "avs testing",
+            is_success    => 1,
+            result_code   => '000',
+            error_message => 'Approved',
+            authorization => '654321',
+            avs_code      => $account->{'AVS Response Code'},
+            cvv2_response => $account->{'Card Validation'},
+
         );
     }
 }
+print '-'x70;
+print "3DS Responses\n";
+print "################# NOT Supported yet\n";
 
+%content = %orig_content;
+################# NOT Supported yet
+#$content{'3ds'} = 'BwABBJQ1AgAAAAAgJDUCAAAAAAA=';
+#delete( $content{'cvv2'} );
+#
+#foreach my $account ( @{$data->{'3ds_response'}} ){
+#    $content{'action'} = 'Authorization Only';
+#    $content{'amount'} = '50.00';
+#    $content{'invoice_number'} = time;
+#    $content{'card_number'} = $account->{'Account Number'};
+#    $content{'type'} = 'CC';
+#
+#    ## get the response validation set for this order
+#    {
+#        my $tx = Business::OnlinePayment->new("Litle", @opts);
+#        $tx->content(%content);
+#        $account->{'Approval Code'} = undef if $account->{'Approval Code'} eq 'NA';
+#        tx_check(
+#            $tx,
+#            desc          => "valid card_number",
+#            is_success    => $account->{'Message'} eq 'Approved' ? 1 : 0,
+#            result_code   => $account->{'Response Code'},
+#            error_message => $account->{'Message'},
+#            authorization => $account->{'Approval Code'},
+#        );
+#    }
+#}
+
+done_testing;
+
+#-----------------------------------------------------------------------------------
+#
 sub tx_check {
     my $tx = shift;
     my %o  = @_;
