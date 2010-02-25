@@ -12,9 +12,9 @@ use Tie::IxHash;
 use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 
-@ISA = qw(Business::OnlinePayment::HTTPS);
-$me = 'Business::OnlinePayment::Litle';
-$DEBUG = 0;
+@ISA     = qw(Business::OnlinePayment::HTTPS);
+$me      = 'Business::OnlinePayment::Litle';
+$DEBUG   = 0;
 $VERSION = '0.01';
 
 =head1 NAME
@@ -26,7 +26,6 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 Version 0.01
 
 =cut
-
 
 =head1 SYNOPSIS
 
@@ -49,8 +48,8 @@ sub set_defaults {
     my $self = shift;
     my %opts = @_;
 
-    $self->server('cert.litle.com') unless $self->server;
-    $self->port('443') unless $self->port;
+    $self->server('cert.litle.com')         unless $self->server;
+    $self->port('443')                      unless $self->port;
     $self->path('/vap/communicator/online') unless $self->path;
 
     if ( $opts{debug} ) {
@@ -60,17 +59,19 @@ sub set_defaults {
 
     ## load in the defaults
     my %_defaults = ();
-    foreach my $key (keys %opts) {
+    foreach my $key ( keys %opts ) {
         $key =~ /^default_(\w*)$/ or next;
         $_defaults{$1} = $opts{$key};
         delete $opts{$key};
     }
 
-    $self->build_subs(qw( order_number md5 avs_code cvv2_response
-                          cavv_response api_version xmlns 
-                     ));
+    $self->build_subs(
+        qw( order_number md5 avs_code cvv2_response
+          cavv_response api_version xmlns
+          )
+    );
 
-    $self->api_version('7.2') unless $self->api_version;
+    $self->api_version('7.2')                   unless $self->api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
 
@@ -79,17 +80,18 @@ sub set_defaults {
 =cut
 
 sub map_fields {
-    my($self) = @_;
+    my ($self) = @_;
 
     my %content = $self->content();
 
-    my $action = lc($content{'action'});
+    my $action  = lc( $content{'action'} );
     my %actions = (
-        'normal authorization'      =>  'sale',
-        'authorization only'        =>  'authorization',
-        'post authorization'        =>  'capture',
-        'void'                      =>  'void',
-        'credit'                    =>  'credit',
+        'normal authorization' => 'sale',
+        'authorization only'   => 'authorization',
+        'post authorization'   => 'capture',
+        'void'                 => 'void',
+        'credit'               => 'credit',
+
         # AVS ONLY
         # Capture Given
         # Force Capture
@@ -108,23 +110,30 @@ sub map_fields {
         'JCB'                         => 'DI',
         'China Union Pay'             => 'DI',
     };
-    
-    $content{'card_type'} = $type_translate->{ cardtype($content{'card_number'})} || $content{'type'};
-        
-    if ($content{recurring_billing} && $content{recurring_billing} eq 'YES' ){
+
+    $content{'card_type'} =
+         $type_translate->{ cardtype( $content{'card_number'} ) }
+      || $content{'type'};
+
+    if ( $content{recurring_billing} && $content{recurring_billing} eq 'YES' ) {
         $content{'orderSource'} = 'recurring';
-    } else {
+    }
+    else {
         $content{'orderSource'} = 'ecommerce';
     }
-    $content{'customerType'} =  $content{'orderSource'} eq 'recurring' ? 'Existing' : 'New'; # new/Existing
+    $content{'customerType'} =
+      $content{'orderSource'} eq 'recurring'
+      ? 'Existing'
+      : 'New';    # new/Existing
 
     $content{'expiration'} =~ s/\D+//g;
 
     $content{'deliverytype'} = 'SVC';
+
     # stuff it back into %content
-    if( $content{'products'} && ref( $content{'products'} ) eq 'ARRAY' ){
+    if ( $content{'products'} && ref( $content{'products'} ) eq 'ARRAY' ) {
         my $count = 1;
-        foreach ( @{ $content{'products'} }){
+        foreach ( @{ $content{'products'} } ) {
             $_->{'itemSequenceNumber'} = $count++;
         }
     }
@@ -137,264 +146,276 @@ sub submit {
     $self->is_success(0);
     $self->map_fields;
     my %content = $self->content();
-    my $action = $content{'TransactionType'};
+    my $action  = $content{'TransactionType'};
 
     my @required_fields = qw(action login type);
 
     $self->required_fields(@required_fields);
     my $post_data;
-    my $writer = new XML::Writer( OUTPUT        => \$post_data,
-                                  DATA_MODE     => 1,
-                                  DATA_INDENT   => 2,
-                                  ENCODING      => 'utf8',
-                              );
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf8',
+    );
 
     # for tabbing
     # clean up the amount to the required format
     my $amount;
-    if (defined($content{amount})) {
-        $amount = sprintf("%.2f",$content{amount});
+    if ( defined( $content{amount} ) ) {
+        $amount = sprintf( "%.2f", $content{amount} );
         $amount =~ s/\.//g;
     }
 
-
-    tie my %billToAddress, 'Tie::IxHash', 
-    $self->revmap_fields(
-        name            =>  'name',
-        email           =>  'email',
-        addressLine1    =>  'address',
-        city            =>  'city',
-        state           =>  'state',
-        zip             =>  'zip',
-        country         =>  'country',  #TODO: will require validation to the spec, this field wont' work as is
-        email           =>  'email',
-        phone           =>  'phone',
+    tie my %billToAddress, 'Tie::IxHash', $self->revmap_fields(
+        name         => 'name',
+        email        => 'email',
+        addressLine1 => 'address',
+        city         => 'city',
+        state        => 'state',
+        zip          => 'zip',
+        country      => 'country'
+        , #TODO: will require validation to the spec, this field wont' work as is
+        email => 'email',
+        phone => 'phone',
     );
 
-    tie my %authentication, 'Tie::IxHash', 
-    $self->revmap_fields(
-        user    =>  'login',
-        password    =>  'password',
-    );
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        user     => 'login',
+        password => 'password',
+      );
 
-    tie my %customerinfo, 'Tie::IxHash', 
-    $self->revmap_fields(
-        customerType    =>  'customerType',
-    );
+    tie my %customerinfo, 'Tie::IxHash',
+      $self->revmap_fields( customerType => 'customerType', );
 
-    my $description  = substr( $content{'description'},0,25 ); # schema req
+    my $description = substr( $content{'description'}, 0, 25 );    # schema req
 
-    tie my %custombilling, 'Tie::IxHash', 
-    $self->revmap_fields(
-        phone       =>  'company_phone',
-        descriptor  =>  \$description,
-    );
+    tie my %custombilling, 'Tie::IxHash',
+      $self->revmap_fields(
+        phone      => 'company_phone',
+        descriptor => \$description,
+      );
 
     ## loop through product list and generate linItemData for each
     #
     my @products = ();
-    foreach my $prod ( @{$content{'products'}}){
-        tie my %lineitem, 'Tie::IxHash', 
-        $self->revmap_fields(
-            content =>  $prod,
-            itemSequenceNumber  =>  'itemSequenceNumber',
-            itemDescription =>  'description',
-            productCode =>  'code',
-            quantity    =>  'quantity',
-            unitOfMeasure   =>  'units',
-            taxAmount   =>  'tax',
-            lineItemTotal   =>  'amount',
-            lineItemTotalWithTax    =>  'totalwithtax',
-            itemDiscountAmount  =>  'discount',
-            commodityCode   =>  'commoditycode',
-            unitCost    =>  'cost',
-        );
+    foreach my $prod ( @{ $content{'products'} } ) {
+        tie my %lineitem, 'Tie::IxHash',
+          $self->revmap_fields(
+            content              => $prod,
+            itemSequenceNumber   => 'itemSequenceNumber',
+            itemDescription      => 'description',
+            productCode          => 'code',
+            quantity             => 'quantity',
+            unitOfMeasure        => 'units',
+            taxAmount            => 'tax',
+            lineItemTotal        => 'amount',
+            lineItemTotalWithTax => 'totalwithtax',
+            itemDiscountAmount   => 'discount',
+            commodityCode        => 'commoditycode',
+            unitCost             => 'cost',
+          );
         push @products, \%lineitem;
     }
+
     #
     #
-    tie my %enhanceddata, 'Tie::IxHash', 
-    $self->revmap_fields(
-            orderDate   =>  'orderdate',
-            salesTax    =>  'salestax',
-            invoiceReferenceNumber  =>  'invoice_number', ##
-            lineItemData    =>  \@products,
-            customerReference   =>  'po_number',
+    tie my %enhanceddata, 'Tie::IxHash', $self->revmap_fields(
+        orderDate              => 'orderdate',
+        salesTax               => 'salestax',
+        invoiceReferenceNumber => 'invoice_number',    ##
+        lineItemData           => \@products,
+        customerReference      => 'po_number',
     );
 
-    tie my %card, 'Tie::IxHash',
-        $self->revmap_fields(
-            type    =>  'card_type',
-            number  =>  'card_number',
-            expDate =>  'expiration',
-            cardValidationNum   =>  'cvv2',
-            cardAuthentication  =>  '3ds',  # is this what we want to name it?
-        );
+    tie my %card, 'Tie::IxHash', $self->revmap_fields(
+        type               => 'card_type',
+        number             => 'card_number',
+        expDate            => 'expiration',
+        cardValidationNum  => 'cvv2',
+        cardAuthentication => '3ds',          # is this what we want to name it?
+    );
 
     tie my %cardholderauth, 'Tie::IxHash',
-        $self->revmap_fields(
-            authenticationValue =>  '3ds',
-            authenticationTransactionId =>  'visaverified',
-            customerIpAddress   =>  'ip',
-            authenticatedByMerchant =>  'authenticated',
-        );
+      $self->revmap_fields(
+        authenticationValue         => '3ds',
+        authenticationTransactionId => 'visaverified',
+        customerIpAddress           => 'ip',
+        authenticatedByMerchant     => 'authenticated',
+      );
 
     my %req;
 
-    if( $action eq 'sale' 
-     || $action eq 'authorization' ){
-        tie %req, 'Tie::IxHash', 
-            $self->revmap_fields(
-                orderId     =>  'invoice_number',
-                amount      =>  \$amount,
-                orderSource =>  'orderSource',
-                customerInfo    =>  \%customerinfo,
-                billToAddress   =>  \%billToAddress,
-                card            =>  \%card,
-                #cardholderAuthentication    =>  \%cardholderauth,
-                customBilling   =>  \%custombilling,
-                enhancedData    =>  \%enhanceddata,
-            );
+    if (   $action eq 'sale'
+        || $action eq 'authorization' )
+    {
+        tie %req, 'Tie::IxHash', $self->revmap_fields(
+            orderId       => 'invoice_number',
+            amount        => \$amount,
+            orderSource   => 'orderSource',
+            customerInfo  => \%customerinfo,
+            billToAddress => \%billToAddress,
+            card          => \%card,
+
+            #cardholderAuthentication    =>  \%cardholderauth,
+            customBilling => \%custombilling,
+            enhancedData  => \%enhanceddata,
+        );
     }
-    elsif( $action eq 'capture' ){
+    elsif ( $action eq 'capture' ) {
         push @required_fields, qw( order_number amount );
-        tie %req, 'Tie::IxHash', 
-            $self->revmap_fields(
-                litleTxnId  =>  'order_number',
-                amount      =>  \$amount,
-                enhancedData    =>  \%enhanceddata,
-            );
+        tie %req, 'Tie::IxHash',
+          $self->revmap_fields(
+            litleTxnId   => 'order_number',
+            amount       => \$amount,
+            enhancedData => \%enhanceddata,
+          );
     }
-    elsif( $action eq 'credit' ){
+    elsif ( $action eq 'credit' ) {
         push @required_fields, qw( order_number amount );
-        tie %req, 'Tie::IxHash', 
-            $self->revmap_fields(
-                litleTxnId  =>  'order_number',
-                amount      =>  \$amount,
-                customBilling   =>  \%custombilling,
-                enhancedData    =>  \%enhanceddata,
-                #bypassVelocityCheck => Not supported yet
-            );
+        tie %req, 'Tie::IxHash', $self->revmap_fields(
+            litleTxnId    => 'order_number',
+            amount        => \$amount,
+            customBilling => \%custombilling,
+            enhancedData  => \%enhanceddata,
+
+            #bypassVelocityCheck => Not supported yet
+        );
     }
-    elsif( $action eq 'void' ){
+    elsif ( $action eq 'void' ) {
         push @required_fields, qw( order_number );
-        tie %req, 'Tie::IxHash', 
-            $self->revmap_fields(
-                litleTxnId  =>  'order_number',
-            );
+        tie %req, 'Tie::IxHash',
+          $self->revmap_fields( litleTxnId => 'order_number', );
     }
 
     $self->required_fields(@required_fields);
 
-        #warn Dumper( \%req ) if $DEBUG;
+    #warn Dumper( \%req ) if $DEBUG;
     ## Start the XML Document, parent tag
     $writer->xmlDecl();
-    $writer->startTag("litleOnlineRequest",
-        version => $self->api_version,
-        xmlns => $self->xmlns,
-        merchantId => $content{'merchantid'}, 
+    $writer->startTag(
+        "litleOnlineRequest",
+        version    => $self->api_version,
+        xmlns      => $self->xmlns,
+        merchantId => $content{'merchantid'},
     );
 
-    $self->_xmlwrite($writer, 'authentication', \%authentication);
-    $writer->startTag($content{'TransactionType'}, id => $content{'invoice_number'}, reportGroup =>"Test", customerId=>"1");
-    foreach ( keys ( %req ) ) { 
-        $self->_xmlwrite($writer, $_, $req{$_});
+    $self->_xmlwrite( $writer, 'authentication', \%authentication );
+    $writer->startTag(
+        $content{'TransactionType'},
+        id          => $content{'invoice_number'},
+        reportGroup => "Test",
+        customerId  => "1"
+    );
+    foreach ( keys(%req) ) {
+        $self->_xmlwrite( $writer, $_, $req{$_} );
     }
 
-    $writer->endTag($content{'TransactionType'});
+    $writer->endTag( $content{'TransactionType'} );
     $writer->endTag("litleOnlineRequest");
     $writer->end();
     ## END XML Generation
 
-
-    my ($page,$server_response,%headers) = $self->https_post($post_data);
+    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    
+
     warn Dumper $page, $server_response, \%headers if $DEBUG;
-    
-  my $response = {};
-  if ($server_response =~ /^200/){
-    $response = XMLin($page);
-    if ( exists($response->{'response'}) && $response->{'response'} == 1) {
-      ## parse error type error
-      print Dumper( $response, $self->{'_post_data'} );
-      $self->error_message($response->{'message'});
-      return;
-    }else{
-      $self->error_message($response->{$content{'TransactionType'} . 'Response'}->{'message'});
+
+    my $response = {};
+    if ( $server_response =~ /^200/ ) {
+        $response = XMLin($page);
+        if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
+        {
+            ## parse error type error
+            print Dumper( $response, $self->{'_post_data'} );
+            $self->error_message( $response->{'message'} );
+            return;
+        }
+        else {
+            $self->error_message(
+                $response->{ $content{'TransactionType'} . 'Response' }
+                  ->{'message'} );
+        }
     }
-  } 
-  warn Dumper( $response ) if $DEBUG;
+    warn Dumper($response) if $DEBUG;
 
-  ## Set up the data:
-  my $resp = $response->{ $content{'TransactionType'} . 'Response'};
-  $self->order_number( $resp->{'litleTxnId'} || '');
-  $self->result_code( $resp->{'response'}    || '');
-  $self->authorization( $resp->{'authCode'}  || '');
-  $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult'} || '');
-  $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '');
+    ## Set up the data:
+    my $resp = $response->{ $content{'TransactionType'} . 'Response' };
+    $self->order_number( $resp->{'litleTxnId'} || '' );
+    $self->result_code( $resp->{'response'}    || '' );
+    $self->authorization( $resp->{'authCode'}  || '' );
+    $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult'}
+          || '' );
+    $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '' );
 
-  $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
+    $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
 
-  unless ( $self->is_success() ) {
-      unless ( $self->error_message()) {
-          $self->error_message(
-              "(HTTPS response: $server_response) ".
-              "(HTTPS headers: ".
-                join(", ", map { "$_ => ". $headers{$_} } keys %headers ). ") ".
-              "(Raw HTTPS content: $page)"
-          );
-      }
-  }
+    unless ( $self->is_success() ) {
+        unless ( $self->error_message() ) {
+            $self->error_message( "(HTTPS response: $server_response) "
+                  . "(HTTPS headers: "
+                  . join( ", ", map { "$_ => " . $headers{$_} } keys %headers )
+                  . ") "
+                  . "(Raw HTTPS content: $page)" );
+        }
+    }
 
 }
 
 sub revmap_fields {
-  my $self = shift;
-  tie my(%map), 'Tie::IxHash', @_;
-  my %content;
-  if($map{'content'} && ref($map{'content'}) eq 'HASH'){
-      %content = %{ delete($map{'content'}) };
-  }else{
-      %content =$self->content();
-  }
+    my $self = shift;
+    tie my (%map), 'Tie::IxHash', @_;
+    my %content;
+    if ( $map{'content'} && ref( $map{'content'} ) eq 'HASH' ) {
+        %content = %{ delete( $map{'content'} ) };
+    }
+    else {
+        %content = $self->content();
+    }
 
-  map {
+    map {
         my $value;
         if ( ref( $map{$_} ) eq 'HASH' ) {
-          $value = $map{$_} if ( keys %{ $map{$_} } );
-        }elsif ( ref( $map{$_} ) eq 'ARRAY' ) {
-          $value = $map{$_};
-        }elsif( ref( $map{$_} ) ) {
-          $value = ${ $map{$_} };
-        }elsif( exists( $content{ $map{$_} } ) ) {
-          $value = $content{ $map{$_} };
+            $value = $map{$_} if ( keys %{ $map{$_} } );
+        }
+        elsif ( ref( $map{$_} ) eq 'ARRAY' ) {
+            $value = $map{$_};
+        }
+        elsif ( ref( $map{$_} ) ) {
+            $value = ${ $map{$_} };
+        }
+        elsif ( exists( $content{ $map{$_} } ) ) {
+            $value = $content{ $map{$_} };
         }
 
-        if (defined($value)) {
-          ($_ => $value);
-        }else{
-          ();
+        if ( defined($value) ) {
+            ( $_ => $value );
         }
-      } (keys %map);
+        else {
+            ();
+        }
+    } ( keys %map );
 }
 
 sub _xmlwrite {
-    my ($self, $writer, $item, $value) = @_;
-    if ( ref( $value ) eq 'HASH' ) {
-        my $attr =   $value->{'attr'} ? $value->{'attr'} : {};
-        $writer->startTag($item, %{ $attr });
-        foreach ( keys ( %$value ) ) {
+    my ( $self, $writer, $item, $value ) = @_;
+    if ( ref($value) eq 'HASH' ) {
+        my $attr = $value->{'attr'} ? $value->{'attr'} : {};
+        $writer->startTag( $item, %{$attr} );
+        foreach ( keys(%$value) ) {
             next if $_ eq 'attr';
-            $self->_xmlwrite($writer, $_, $value->{$_});
+            $self->_xmlwrite( $writer, $_, $value->{$_} );
         }
         $writer->endTag($item);
-    }elsif ( ref( $value ) eq 'ARRAY' ) {
-        foreach ( @{ $value } ) {
-            $self->_xmlwrite($writer, $item, $_);
+    }
+    elsif ( ref($value) eq 'ARRAY' ) {
+        foreach ( @{$value} ) {
+            $self->_xmlwrite( $writer, $item, $_ );
         }
-    }else{
+    }
+    else {
         $writer->startTag($item);
         $writer->characters($value);
         $writer->endTag($item);
@@ -468,4 +489,4 @@ perl(1). L<Business::OnlinePayment>
 
 =cut
 
-1; # End of Business::OnlinePayment::Litle
+1;    # End of Business::OnlinePayment::Litle

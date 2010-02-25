@@ -13,6 +13,12 @@ WriteMakefile(
     PL_FILES            => {},
     PREREQ_PM => {
         'Test::More' => 0,
+        'Business::OnlinePayment'        => 0,
+        'Business::OnlinePayment::HTTPS' => 0,
+        'XML::Writer'          => 0,
+        'XML::Simple'          => 0,
+        'Tie::IxHash'          => 0,
+        'Business::CreditCard' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'Business-OnlinePayment-Litle-*' },
