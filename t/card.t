@@ -23,7 +23,7 @@ ok( $password, 'Supplied a Password' );
 like( $merchantid, qr/^\d+/, 'MerchantID');
 
 my %orig_content = (
-    type           => 'VISA',
+    type           => 'CC',
     login          => $login,
     password       => $password,
     merchantid      =>  $merchantid,
@@ -42,10 +42,16 @@ my %orig_content = (
     zip            => '84058',
     country        => 'US',      # will be forced to USA
     customer_id    => 'tfb',
-    company_phone   => '801.123-4567',
-    url             =>  'support.foo.com',
-    invoice_number  => '1234',
-    ip              =>  '127.0.0.1',
+    company_phone  => '801.123-4567',
+    url            =>  'support.foo.com',
+    invoice_number => '1234',
+    ip             =>  '127.0.0.1',
+    ship_name      =>  'Tofu Beast, Co.',
+    ship_address   =>  '123 Anystreet',
+    ship_city      => 'Anywhere',
+    ship_state     => 'UT',
+    ship_zip       => '84058',
+    ship_country   => 'US',      # will be forced to USA
     products        =>  [
     {   description =>  'First Product',
         sku         =>  'sku',

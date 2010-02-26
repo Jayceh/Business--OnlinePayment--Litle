@@ -15,7 +15,7 @@ use Data::Dumper;
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.01';
+$VERSION = '0.2';
 
 =head1 NAME
 
@@ -29,16 +29,116 @@ Version 0.01
 
 =head1 SYNOPSIS
 
-Quick summary of what the module does.
+This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Litle specific usage.
 
-Perhaps a little code snippet.
+In order to use this module, you will need to have an account set up with Litle & Co. L<http://www.litle.com/>
 
-    use Business::OnlinePayment::Litle;
 
-    my $foo = Business::OnlinePayment::Litle->new();
-    ...
+  use Business::OnlinePayment;
+  my $tx = Business::OnlinePayment->new(
+     "Litle",
+     default_Origin => 'NEW',
+  );
 
-=head1 FUub CTIONS
+  $tx->content(
+      type           => 'CC',
+      login          => 'testdrive',
+      password       => '123qwe',
+      action         => 'Normal Authorization',
+      description    => 'FOO*Business::OnlinePayment test',
+      amount         => '49.95',
+      customer_id    => 'tfb',
+      name           => 'Tofu Beast',
+      address        => '123 Anystreet',
+      city           => 'Anywhere',
+      state          => 'UT',
+      zip            => '84058',
+      card_number    => '4007000000027',
+      expiration     => '09/02',
+      cvv2           => '1234', #optional
+      invoice_number => '54123',
+  );
+  $tx->submit();
+
+  if($tx->is_success()) {
+      print "Card processed successfully: ".$tx->authorization."\n";
+  } else {
+      print "Card was rejected: ".$tx->error_message."\n";
+  }
+
+=head1 METHODS AND FUNCTIONS
+
+See L<Business::OnlinePayment> for the complete list. The following methods either override the methods in L<Business::OnlinePayment> or provide additional functions.  
+
+=head2 result_code
+
+Returns the response error code.
+
+=head2 error_message
+
+Returns the response error description text.
+
+=head2 server_response
+
+Returns the complete response from the server.
+
+=head1 Handling of content(%content) data:
+
+=head2 action
+
+The following actions are valid
+
+  normal authorization
+  authorization only
+  post authorization
+  credit
+  void
+
+=head1 Litle specific data
+
+=head2 Fields
+
+Mostdata fields nto part of the BOP standard can be added to the content hash directly, and will be used
+
+=head2 Products
+
+Part of the enhanced data for level III Interchange rates
+
+    products        =>  [
+    {   description =>  'First Product',
+        sku         =>  'sku',
+        quantity    =>  1,
+        units       =>  'Months',
+        amount      =>  500,  ## currently I don't reformat this, $5.00
+        discount    =>  0,
+        code        =>  1,
+        cost        =>  500,
+    },
+    {   description =>  'Second Product',
+        sku         =>  'sku',
+        quantity    =>  1,
+        units       =>  'Months',
+        amount      =>  1500,
+        discount    =>  0,
+        code        =>  2,
+        cost        =>  500,
+    }
+
+    ],
+
+=cut
+
+=head1 SPECS
+
+Currently uses the Litle XML specifications version 7.2
+
+=head1 TESTING
+
+In order to run the provided test suite, you will first need to apply and get your account setup with Litle.  Then you can use the test account information they give you to run the test suite.  The scripts will look for three environment variables to connect: BOP_USERNAME, BOP_PASSWORD, BOP_MERCHANTID
+
+Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
+
+=head1 FUNCTIONS
 
 =head2 set_defaults
 
@@ -176,8 +276,19 @@ sub submit {
         zip          => 'zip',
         country      => 'country'
         , #TODO: will require validation to the spec, this field wont' work as is
-        email => 'email',
         phone => 'phone',
+    );
+
+    tie my %shipToAddress, 'Tie::IxHash', $self->revmap_fields(
+        name         => 'ship_name',
+        email        => 'ship_email',
+        addressLine1 => 'ship_address',
+        city         => 'ship_city',
+        state        => 'ship_state',
+        zip          => 'ship_zip',
+        country      => 'ship_country'
+        , #TODO: will require validation to the spec, this field wont' work as is
+        phone => 'ship_phone',
     );
 
     tie my %authentication, 'Tie::IxHash',
@@ -256,8 +367,8 @@ sub submit {
             orderSource   => 'orderSource',
             customerInfo  => \%customerinfo,
             billToAddress => \%billToAddress,
+            shipToAddress => \%shipToAddress,
             card          => \%card,
-
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
             enhancedData  => \%enhanceddata,
@@ -426,13 +537,21 @@ sub _xmlwrite {
 
 Jason Hall, C<< <jayce at lug-nut.com> >>
 
+=head1 UNIMPLEMENTED
+
+Cretain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
+   
+    Force Capture
+    3DS
+    billMeLater
+
 =head1 BUGS
 
 Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>, or through
 the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle>.  I will be notified, and then you'll
 automatically be notified of progress on your bug as I make changes.
 
-
+You may also add to the code via github, at L<http://github.com/Jayceh/Business--OnlinePayment--Litle.git>
 
 
 =head1 SUPPORT
@@ -469,6 +588,7 @@ L<http://search.cpan.org/dist/Business-OnlinePayment-Litle/>
 
 =head1 ACKNOWLEDGEMENTS
 
+Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it also required dynamically writing XML formatted docs to a gateway.
 
 =head1 COPYRIGHT & LICENSE
 
@@ -479,6 +599,7 @@ under the terms of either: the GNU General Public License as published
 by the Free Software Foundation; or the Artistic License.
 
 See http://dev.perl.org/licenses/ for more information.
+
 =back
 
 
