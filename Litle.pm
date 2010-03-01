@@ -542,8 +542,10 @@ Jason Hall, C<< <jayce at lug-nut.com> >>
 Cretain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
    
     Force Capture
+    Capture Given Auth
     3DS
     billMeLater
+    Credit against non-litle transaction
 
 =head1 BUGS
 
