@@ -5,3 +5,4 @@ README
 Litle.pm
 t/00-load.t
 t/card.t
+t/data.str

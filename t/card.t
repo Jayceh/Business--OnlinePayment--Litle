@@ -1,6 +1,6 @@
 #!/usr/bin/perl -w
 
-use Test::More;
+use Test::More qw(no_plan);
 use Storable;
 
 ## grab info from the ENV
@@ -15,12 +15,21 @@ my $data = retrieve('t/data.str');
 use Data::Dumper;
 print Dumper( keys %{$data} );
 
-#plan tests => 319;
+#plan tests => 391;
   
+my $authed = 
+    $ENV{BOP_USERNAME}
+    && $ENV{BOP_PASSWORD}
+    && $ENV{BOP_MERCHANTID};
+
 use_ok 'Business::OnlinePayment';
-ok( $login, 'Supplied a Login' );
-ok( $password, 'Supplied a Password' );
-like( $merchantid, qr/^\d+/, 'MerchantID');
+
+SKIP: {
+    skip "No Auth Supplied", 3, !$authed;
+    ok( $login, 'Supplied a Login' );
+    ok( $password, 'Supplied a Password' );
+    like( $merchantid, qr/^\d+/, 'MerchantID');
+}
 
 my %orig_content = (
     type           => 'CC',
@@ -75,173 +84,187 @@ my %orig_content = (
     ],
 );
 
-my %content = %orig_content;
+    my %auth_resp = ();
+SKIP: {
+    skip "No Test Account setup",54 if ! $authed;
+    my %content = %orig_content;
 ### Litle AUTH Tests
-print '-'x70;
-print "AUTH TESTS\n";
-my %auth_resp = ();
-foreach my $account ( @{$data->{'account'}} ){
-    $content{'amount'} = $account->{'Amount'};
-    $content{'type'} = $account->{'CardType'};
-    $content{'card_number'} = $account->{'AccountNumber'};
-    $content{'expiration'} = $account->{'ExpDate'};
-    $content{'cvv2'} = $account->{'CardValidation'};
-    $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
-    $content{'invoice_number'} = $account->{'OrderId'};
-    ## get the response validation set for this order
-    my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
-    $content{'name'} = $address->{'Name'};
-    $content{'address'} = $address->{'Address1'};
-    $content{'address2'} = $address->{'Address2'};
-    $content{'city'} = $address->{'City'};
-    $content{'state'} = $address->{'State'};
-    $content{'state'} = $address->{'State'};
-    $content{'zip'} = $address->{'Zip'};
+    print '-'x70;
+    print "AUTH TESTS\n";
+    foreach my $account ( @{$data->{'account'}} ){
+        $content{'amount'} = $account->{'Amount'};
+        $content{'type'} = $account->{'CardType'};
+        $content{'card_number'} = $account->{'AccountNumber'};
+        $content{'expiration'} = $account->{'ExpDate'};
+        $content{'cvv2'} = $account->{'CardValidation'};
+        $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
+        $content{'invoice_number'} = $account->{'OrderId'};
+        ## get the response validation set for this order
+        my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
+        $content{'name'} = $address->{'Name'};
+        $content{'address'} = $address->{'Address1'};
+        $content{'address2'} = $address->{'Address2'};
+        $content{'city'} = $address->{'City'};
+        $content{'state'} = $address->{'State'};
+        $content{'state'} = $address->{'State'};
+        $content{'zip'} = $address->{'Zip'};
 
-    my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'auth_response'} };
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        tx_check(
-            $tx,
-            desc          => "Auth Only",
-            is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $resp_validation->{'Response Code'},
-            error_message => $resp_validation->{'Message'},
-            authorization => $resp_validation->{'Auth Code'},
-            avs_code      => $resp_validation->{'AVS Result'},
-            cvv2_response => $resp_validation->{'Card Validation Result'},
-        );
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'auth_response'} };
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Auth Only",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'Response Code'},
+                error_message => $resp_validation->{'Message'},
+                authorization => $resp_validation->{'Auth Code'},
+                avs_code      => $resp_validation->{'AVS Result'},
+                cvv2_response => $resp_validation->{'Card Validation Result'},
+            );
 
-        $auth_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+            $auth_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        }
     }
 }
 
 print '-'x70;
 print "SALE\n";
 my %sale_resp = ();
+SKIP: {
+    skip "No Test Account setup",54 if ! $authed;
 %content = %orig_content;
 
-foreach my $account ( @{$data->{'account'}} ){
-    $content{'action'} = 'Normal Authorization';
-    $content{'amount'} = $account->{'Amount'};
-    $content{'type'} = $account->{'CardType'};
-    $content{'card_number'} = $account->{'AccountNumber'};
-    $content{'expiration'} = $account->{'ExpDate'};
-    $content{'cvv2'} = $account->{'CardValidation'};
-    $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
-    $content{'invoice_number'} = $account->{'OrderId'};
-    ## get the response validation set for this order
-    my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
-    $content{'name'} = $address->{'Name'};
-    $content{'address'} = $address->{'Address1'};
-    $content{'address2'} = $address->{'Address2'};
-    $content{'city'} = $address->{'City'};
-    $content{'state'} = $address->{'State'};
-    $content{'state'} = $address->{'State'};
-    $content{'zip'} = $address->{'Zip'};
+    foreach my $account ( @{$data->{'account'}} ){
+        $content{'action'} = 'Normal Authorization';
+        $content{'amount'} = $account->{'Amount'};
+        $content{'type'} = $account->{'CardType'};
+        $content{'card_number'} = $account->{'AccountNumber'};
+        $content{'expiration'} = $account->{'ExpDate'};
+        $content{'cvv2'} = $account->{'CardValidation'};
+        $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
+        $content{'invoice_number'} = $account->{'OrderId'};
+        ## get the response validation set for this order
+        my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
+        $content{'name'} = $address->{'Name'};
+        $content{'address'} = $address->{'Address1'};
+        $content{'address2'} = $address->{'Address2'};
+        $content{'city'} = $address->{'City'};
+        $content{'state'} = $address->{'State'};
+        $content{'state'} = $address->{'State'};
+        $content{'zip'} = $address->{'Zip'};
 
-    my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'sales'} };
-    #print Dumper(\%content);
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        tx_check(
-            $tx,
-            desc          => "Sale Order",
-            is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $resp_validation->{'ResponseCode'},
-            error_message => $resp_validation->{'Message'},
-            authorization => $resp_validation->{'AuthCode'},
-            avs_code      => $resp_validation->{'AVSResult'},
-            cvv2_response => $resp_validation->{'Card Validation Result'},
-        );
-        $sale_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'sales'} };
+        #print Dumper(\%content);
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Sale Order",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'ResponseCode'},
+                error_message => $resp_validation->{'Message'},
+                authorization => $resp_validation->{'AuthCode'},
+                avs_code      => $resp_validation->{'AVSResult'},
+                cvv2_response => $resp_validation->{'Card Validation Result'},
+            );
+            $sale_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        }
     }
 }
-
 print '-'x70;
 print "CAPTURE\n";
 
 my %cap_resp = ();
-%content = %orig_content;
 
-foreach my $account ( @{$data->{'account'}} ){
-    next if $account->{'OrderId'} > 5; #can only capture first 5
-    $content{'action'} = 'Post Authorization';
-    $content{'amount'} = $account->{'Amount'};
-    $content{'invoice_number'} = $account->{'OrderId'};
-    $content{'order_number'} = $auth_resp{ $account->{'OrderId'} };
+SKIP: {
+    skip "No Test Account setup",15 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'account'}} ){
+        next if $account->{'OrderId'} > 5; #can only capture first 5
+        $content{'action'} = 'Post Authorization';
+        $content{'amount'} = $account->{'Amount'};
+        $content{'invoice_number'} = $account->{'OrderId'};
+        $content{'order_number'} = $auth_resp{ $account->{'OrderId'} };
 
-    ## get the response validation set for this order
-    my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'capture'} };
-    #print Dumper(\%content);
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        tx_check(
-            $tx,
-            desc          => "Capture",
-            is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $resp_validation->{'ResponseCode'},
-            error_message => $resp_validation->{'Message'},
-        );
-        $cap_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        ## get the response validation set for this order
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'capture'} };
+        #print Dumper(\%content);
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Capture",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'ResponseCode'},
+                error_message => $resp_validation->{'Message'},
+            );
+            $cap_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        }
     }
 }
 
 print '-'x70;
 print "CREDIT\n";
 
-%content = %orig_content;
-#$content{'order_number'} = $sale_resp{ $account->{'OrderId'} } if $account->{'OrderId'} == 6;
-foreach my $account ( @{$data->{'account'}} ){
-    next if $account->{'OrderId'} > 5;
-    $content{'action'} = 'Credit';
-    $content{'amount'} = $account->{'Amount'};
-    $content{'invoice_number'} = $account->{'OrderId'};
-    $content{'order_number'} = $cap_resp{ $account->{'OrderId'} };
+SKIP: {
+    skip "No Test Account setup",15 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'account'}} ){
+        next if $account->{'OrderId'} > 5;
+        $content{'action'} = 'Credit';
+        $content{'amount'} = $account->{'Amount'};
+        $content{'invoice_number'} = $account->{'OrderId'};
+        $content{'order_number'} = $cap_resp{ $account->{'OrderId'} };
 
-    ## get the response validation set for this order
-    my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'credit_response'} };
-    #print Dumper(\%content);
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        tx_check(
-            $tx,
-            desc          => "Credits",
-            is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $resp_validation->{'ResponseCode'},
-            error_message => $resp_validation->{'Message'},
-        );
+        ## get the response validation set for this order
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'credit_response'} };
+        #print Dumper(\%content);
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Credits",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'ResponseCode'},
+                error_message => $resp_validation->{'Message'},
+            );
+        }
     }
 }
+    
 
 print '-'x70;
 print "VOID\n";
 
-%content = %orig_content;
-foreach my $account ( @{$data->{'account'}} ){
-    next if $account->{'OrderId'} > 5;
-    $content{'action'} = 'Void';
-    $content{'amount'} = $account->{'Amount'};
-    $content{'invoice_number'} = $account->{'OrderId'};
-    ## void from the sales tests, so they are active, and we can do the 6th test
-    $content{'order_number'} = $sale_resp{ $account->{'OrderId'} } if $sale_resp{ $account->{'OrderId'} };
+SKIP: {
+    skip "No Test Account setup",15 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'account'}} ){
+        next if $account->{'OrderId'} > 5;
+        $content{'action'} = 'Void';
+        $content{'amount'} = $account->{'Amount'};
+        $content{'invoice_number'} = $account->{'OrderId'};
+        ## void from the sales tests, so they are active, and we can do the 6th test
+        $content{'order_number'} = $sale_resp{ $account->{'OrderId'} } if $sale_resp{ $account->{'OrderId'} };
 
-    ## get the response validation set for this order
-    my ($resp_validation) = grep { $_->{'OrderID'} ==  $account->{'OrderId'} } @{ $data->{'void_response'} };
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        tx_check(
-            $tx,
-            desc          => "Void",
-            is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $resp_validation->{'Response Code'},
-            error_message => $resp_validation->{'Message'},
-        );
+        ## get the response validation set for this order
+        my ($resp_validation) = grep { $_->{'OrderID'} ==  $account->{'OrderId'} } @{ $data->{'void_response'} };
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Void",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'Response Code'},
+                error_message => $resp_validation->{'Message'},
+            );
+        }
     }
 }
 
@@ -249,61 +272,67 @@ foreach my $account ( @{$data->{'account'}} ){
 print '-'x70;
 print "Response Codes\n";
 
-%content = %orig_content;
-foreach my $account ( @{$data->{'response_codes'}} ){
-    $content{'action'} = 'Authorization Only';
-    $content{'amount'} = '50.00';
-    $content{'invoice_number'} = time;
-    $content{'card_number'} = $account->{'Account Number'};
-    $content{'type'} = 'CC';
+SKIP: {
+    skip "No Test Account setup",112 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'response_codes'}} ){
+        $content{'action'} = 'Authorization Only';
+        $content{'amount'} = '50.00';
+        $content{'invoice_number'} = time;
+        $content{'card_number'} = $account->{'Account Number'};
+        $content{'type'} = 'CC';
 
-    #### exp date hack for response, this one test requires it
-    if( $account->{'Account Number'} eq '4457000200000008'){
-        $content{'expiration'} = '21/20'; #impossible, but formatted correctly date
-    }
+        #### exp date hack for response, this one test requires it
+        if( $account->{'Account Number'} eq '4457000200000008'){
+            $content{'expiration'} = '21/20'; #impossible, but formatted correctly date
+        }
 
-    ## get the response validation set for this order
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        $account->{'Approval Code'} = undef if $account->{'Approval Code'} eq 'NA';
-        tx_check(
-            $tx,
-            desc          => "Response Codes",
-            is_success    => $account->{'Message'} eq 'Approved' ? 1 : 0,
-            result_code   => $account->{'Response Code'},
-            error_message => $account->{'Message'},
-            authorization => $account->{'Approval Code'},
-        );
+        ## get the response validation set for this order
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            $account->{'Approval Code'} = undef if $account->{'Approval Code'} eq 'NA';
+            tx_check(
+                $tx,
+                desc          => "Response Codes",
+                is_success    => $account->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $account->{'Response Code'},
+                error_message => $account->{'Message'},
+                authorization => $account->{'Approval Code'},
+            );
+        }
     }
 }
 
 print '-'x70;
 print "AVS/Validation Tests\n";
 
-%content = %orig_content;
-foreach my $account ( @{$data->{'avs_validation'}} ){
-    $content{'action'} = 'Authorization Only';
-    $content{'amount'} = '50.00';
-    $content{'invoice_number'} = time;
-    $content{'card_number'} = $account->{'Account Number'};
-    $content{'type'} = 'CC';
+SKIP: {
+    skip "No Test Account setup", 84 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'avs_validation'}} ){
+        $content{'action'} = 'Authorization Only';
+        $content{'amount'} = '50.00';
+        $content{'invoice_number'} = time;
+        $content{'card_number'} = $account->{'Account Number'};
+        $content{'type'} = 'CC';
 
-    ## get the response validation set for this order
-    {
-        my $tx = Business::OnlinePayment->new("Litle", @opts);
-        $tx->content(%content);
-        tx_check(
-            $tx,
-            desc          => "avs testing",
-            is_success    => 1,
-            result_code   => '000',
-            error_message => 'Approved',
-            authorization => '654321',
-            avs_code      => $account->{'AVS Response Code'},
-            cvv2_response => $account->{'Card Validation'},
+        ## get the response validation set for this order
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "avs testing",
+                is_success    => 1,
+                result_code   => '000',
+                error_message => 'Approved',
+                authorization => '654321',
+                avs_code      => $account->{'AVS Response Code'},
+                cvv2_response => $account->{'Card Validation'},
 
-        );
+            );
+        }
     }
 }
 print '-'x70;
