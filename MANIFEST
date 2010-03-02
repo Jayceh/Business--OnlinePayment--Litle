@@ -3,6 +3,7 @@ MANIFEST
 Makefile.PL
 README
 Litle.pm
+ErrorCodes.pm
 t/00-load.t
 t/card.t
 t/data.str
