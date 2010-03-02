@@ -23,7 +23,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.01
+Version 0.2
 
 =cut
 
@@ -140,6 +140,31 @@ Currently the description field also uses a fixed descriptor.  This will possibl
 
 =head1 FUNCTIONS
 
+=head2 _info
+
+Return the introspection hash for BOP 3.x
+
+=cut
+
+sub _info {
+    return {
+        info_compat         =>  '0.01',
+        gateway_name        =>  'Litle',
+        gateway_url         =>  'http://www.litle.com',
+        module_version      =>  $VERSION,
+        supported_types     =>  [ 'CC' ],
+        supported_actions   =>  {
+            CC  =>  [
+                'Normal Authorization',
+                'Post Authorization',
+                'Authorization Only',
+                'Credit',
+                'Void',
+                ],
+            },
+    }
+}
+
 =head2 set_defaults
 
 =cut
@@ -167,7 +192,7 @@ sub set_defaults {
 
     $self->build_subs(
         qw( order_number md5 avs_code cvv2_response
-          cavv_response api_version xmlns
+          cavv_response api_version xmlns failure_status
           )
     );
 
