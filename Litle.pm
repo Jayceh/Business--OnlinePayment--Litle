@@ -16,7 +16,7 @@ use Data::Dumper;
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.2';
+$VERSION = '0.3';
 
 =head1 NAME
 
