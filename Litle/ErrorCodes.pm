@@ -43,6 +43,7 @@ sub lookup {
                      notes => 'Insufficient Funds',
                      reason =>  'Cardholder does not have funds available',
                      status =>  'Soft',
+                     failure    =>  'nsf',
                    },
           '111' => {
                      notes => 'Authorization amount has already been depleted',
@@ -114,16 +115,19 @@ sub lookup {
                      notes => 'Pick Up Card',
                      reason =>  'In card-present situation, this is a request to retain the card from the customer',
                      status =>  'Hard',
+                     failure    =>  'pickup',
                    },
           '304' => {
                      notes => 'Lost/Stolen Card',
                      reason =>  'The credit card was reported as lost or stolen',
                      status =>  'Hard',
+                     failure    =>  'stolen',
                    },
           '305' => {
                      notes => 'Expired Card',
                      reason =>  'The card is no longer valid',
                      status =>  'Hard',
+                     failure    =>  'expired',
                    },
           '306' => {
                      notes => 'Authorization has expired; no need to reverse',

@@ -5,6 +5,7 @@ use strict;
 
 use Business::OnlinePayment;
 use Business::OnlinePayment::HTTPS;
+use Business::OnlinePayment::Litle::ErrorCodes '%ERRORS';
 use vars qw(@ISA $me $DEBUG $VERSION);
 use XML::Writer;
 use XML::Simple;
@@ -474,6 +475,8 @@ sub submit {
                 $response->{ $content{'TransactionType'} . 'Response' }
                   ->{'message'} );
         }
+    } else {
+        die "CONNECTION FAILURE: $server_response";
     }
     warn Dumper($response) if $DEBUG;
 
@@ -487,6 +490,14 @@ sub submit {
     $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '' );
 
     $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
+
+    ##Failure Status for 3.0 users
+    if( ! $self->is_success ) {
+        my $f_status = $ERRORS{ $self->result_code }->{'failure'}
+        ? $ERRORS{ $self->result_code }->{'failure'}
+        : 'decline';
+        $self->failure_status( $f_status );
+    }
 
     unless ( $self->is_success() ) {
         unless ( $self->error_message() ) {
