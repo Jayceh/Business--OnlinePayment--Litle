@@ -23,6 +23,12 @@ You can also look for information at:
     RT, CPAN's request tracker
         http://rt.cpan.org/NoAuth/Bugs.html?Dist=Business-OnlinePayment-Litle
 
+    GitHub, Source Control
+        http://github.com/Jayceh/Business--OnlinePayment--Litle.git
+
+    Wiki
+        http://wiki.github.com/Jayceh/Business--OnlinePayment--Litle/
+
     AnnoCPAN, Annotated CPAN documentation
         http://annocpan.org/dist/Business-OnlinePayment-Litle
 
@@ -35,7 +41,7 @@ You can also look for information at:
 
 COPYRIGHT AND LICENCE
 
-Copyright (C) 2009 Jason Hall
+Copyright (C) 2010 Jason Hall
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
