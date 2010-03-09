@@ -16,7 +16,7 @@ use Data::Dumper;
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.3';
+$VERSION = '0.4';
 
 =head1 NAME
 
@@ -24,7 +24,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.2
+Version 0.4
 
 =cut
 
@@ -225,7 +225,7 @@ sub map_fields {
     );
     $content{'TransactionType'} = $actions{$action} || $action;
 
-    $content{'company_phone'} =~ s/\D//g;
+    $content{'company_phone'} =~ s/\D//g if $content{'company_phone'};
 
     my $type_translate = {
         'VISA card'                   => 'VI',
@@ -443,7 +443,7 @@ sub submit {
         $content{'TransactionType'},
         id          => $content{'invoice_number'},
         reportGroup => "Test",
-        customerId  => "1"
+        customerId  => $content{'customer_id'} || 1, 
     );
     foreach ( keys(%req) ) {
         $self->_xmlwrite( $writer, $_, $req{$_} );
@@ -649,3 +649,4 @@ perl(1). L<Business::OnlinePayment>
 =cut
 
 1;    # End of Business::OnlinePayment::Litle
+
