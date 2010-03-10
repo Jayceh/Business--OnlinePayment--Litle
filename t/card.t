@@ -128,6 +128,34 @@ SKIP: {
     }
 }
 
+
+print '-'x70;
+print "AUTH REVERSAL\n";
+
+SKIP: {
+    skip "No Test Account setup",12 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'auth_reversal_info'}} ){
+        $content{'action'} = 'Auth Reversal';
+        $content{'amount'} = $account->{'Auth Amount'};
+        $content{'invoice_number'} = $account->{'Order ID'};
+        $content{'order_number'} = $auth_resp{ $account->{'Order ID'} } if $auth_resp{ $account->{'Order ID'} };
+        ## get the response validation set for this order
+        my ($resp_validation) = grep { $_->{'Order ID'} ==  $account->{'Order ID'} } @{ $data->{'auth_reversal_response'} };
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Auth Reversal",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'Response'},
+                error_message => $resp_validation->{'Message'},
+            );
+        }
+    }
+}
+
 print '-'x70;
 print "SALE\n";
 my %sale_resp = ();
@@ -266,6 +294,7 @@ SKIP: {
         }
     }
 }
+
 
 
 print '-'x70;
@@ -423,30 +452,30 @@ $data= {
                                     {
                                       'Order ID' => '1',
                                       'Payment Type' => 'VI',
-                                      'Capture Amount' => '50.05',
-                                      'Reversal Amount' => '',
-                                      'Auth Amount' => '100.10'
+                                      'Capture Amount' => '5005',
+                                      'Reversal Amount' => '5005',
+                                      'Auth Amount' => '10010'
                                     },
                                     {
                                       'Order ID' => '2',
                                       'Payment Type' => 'MC',
-                                      'Capture Amount' => 'N/A',
-                                      'Reversal Amount' => '',
-                                      'Auth Amount' => '200.20'
+                                      'Capture Amount' => '',
+                                      'Reversal Amount' => '20020',
+                                      'Auth Amount' => '20020'
                                     },
                                     {
                                       'Order ID' => '3',
                                       'Payment Type' => 'DI',
                                       'Capture Amount' => 'N/A',
-                                      'Reversal Amount' => '',
-                                      'Auth Amount' => '300.30'
+                                      'Reversal Amount' => '10000',
+                                      'Auth Amount' => '30030'
                                     },
                                     {
                                       'Order ID' => '4',
                                       'Payment Type' => 'AX',
-                                      'Capture Amount' => '200.20',
-                                      'Reversal Amount' => '200.20',
-                                      'Auth Amount' => '400.40'
+                                      'Capture Amount' => '20020',
+                                      'Reversal Amount' => '20020',
+                                      'Auth Amount' => '40040'
                                     }
                                   ],
           'void_response' => [
@@ -555,7 +584,8 @@ $data= {
                                   'Card Type' => 'DI'
                                 },
                                 {
-                                  'AVS Response Code' => '33',
+                                #'AVS Response Code' => '33',
+                                  'AVS Response Code' => '31',
                                   'Account Number' => '5112000500000009',
                                   'Card Validation' => '',
                                   'Card Type' => 'MC'
@@ -716,9 +746,11 @@ $data= {
                        },
                        {
                          'OrderId' => '8',
-                         'ResponseCode' => '123',
+                         #'ResponseCode' => '123',
+                         'ResponseCode' => '120',
                          'AuthCode' => '',
-                         'Message' => 'Call Discover',
+                         #'Message' => 'Call Discover',
+                         'Message' => 'Call Issuer',
                          'Authentication Result' => '',
                          'Card Validation Result' => 'P',
                          'AVSResult' => '34'
@@ -798,10 +830,10 @@ $data= {
                                  'Card Validation Result' => 'N'
                                },
                                {
-                                 'Response Code' => '123',
+                                 'Response Code' => '120',
                                  'OrderId' => '8',
                                  'AVS Result' => '34',
-                                 'Message' => 'Call Discover',
+                                 'Message' => 'Call Issuer',
                                  'Authentication Result' => '',
                                  'Auth Code' => '',
                                  'Card Validation Result' => 'P'
@@ -861,8 +893,8 @@ $data= {
                                    },
                                    {
                                      'OrderId' => '8',
-                                     'Message' => 'Call Discover',
-                                     'Response' => '123',
+                                     'Message' => 'Call Issuer',
+                                     'Response' => '120',
                                      'AVSResult' => '34'
                                    },
                                    {
@@ -1259,17 +1291,18 @@ $data= {
                                   'Card Type' => 'MC'
                                 },
                                 {
-                                  'Response Code' => '121',
+                                  #'Response Code' => '121',
+                                  'Response Code' => '120',
                                   'AVS Response Code' => undef,
-                                  'Message' => 'Call AMEX',
+                                  'Message' => 'Call Issuer',
                                   'Account Number' => '375000030000001',
                                   'Approval Code' => 'NA',
                                   'Card Type' => 'AX'
                                 },
                                 {
-                                  'Response Code' => '123',
+                                  'Response Code' => '120',
                                   'AVS Response Code' => undef,
-                                  'Message' => 'Call Discover',
+                                  'Message' => 'Call Issuer',
                                   'Account Number' => '6011000400000000',
                                   'Approval Code' => 'NA',
                                   'Card Type' => 'DI'
@@ -1453,9 +1486,10 @@ $data= {
                               ],
           'auth_reversal_response' => [
                                         {
-                                          'Message' => 'Authorization amount has already been depleted',
+                                        #'Message' => 'Authorization amount has already been depleted',
+                                          'Message'  => 'Approved',
                                           'Order ID' => '1',
-                                          'Response' => '111'
+                                          'Response' => '000'
                                         },
                                         {
                                           'Message' => 'Approved',

@@ -174,7 +174,8 @@ sub set_defaults {
     my $self = shift;
     my %opts = @_;
 
-    $self->server('cert.litle.com')         unless $self->server;
+    $self->server('https://payments.litle.com') unless $self->server;
+
     $self->port('443')                      unless $self->port;
     $self->path('/vap/communicator/online') unless $self->path;
 
@@ -217,6 +218,7 @@ sub map_fields {
         'post authorization'   => 'capture',
         'void'                 => 'void',
         'credit'               => 'credit',
+        'auth reversal'        => 'authReversal',
 
         # AVS ONLY
         # Capture Given
@@ -271,6 +273,11 @@ sub submit {
 
     $self->is_success(0);
     $self->map_fields;
+
+    if ($self->test_transaction()) {
+        $self->server('cert.litle.com');    ## alternate host for processing
+    }
+
     my %content = $self->content();
     my $action  = $content{'TransactionType'};
 
@@ -425,6 +432,14 @@ sub submit {
         tie %req, 'Tie::IxHash',
           $self->revmap_fields( litleTxnId => 'order_number', );
     }
+    elsif ( $action eq 'authReversal' ) {
+        push @required_fields, qw( order_number amount );
+        tie %req, 'Tie::IxHash', $self->revmap_fields(
+            litleTxnId    => 'order_number',
+            amount        => 'amount',
+        );
+
+    }
 
     $self->required_fields(@required_fields);
 
@@ -478,12 +493,15 @@ sub submit {
     } else {
         die "CONNECTION FAILURE: $server_response";
     }
+    $self->{_response} = $response;
+
     warn Dumper($response) if $DEBUG;
 
     ## Set up the data:
     my $resp = $response->{ $content{'TransactionType'} . 'Response' };
     $self->order_number( $resp->{'litleTxnId'} || '' );
     $self->result_code( $resp->{'response'}    || '' );
+    $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
     $self->authorization( $resp->{'authCode'}  || '' );
     $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult'}
           || '' );
