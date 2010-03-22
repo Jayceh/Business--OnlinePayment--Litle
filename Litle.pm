@@ -16,7 +16,7 @@ use Data::Dumper;
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.4';
+$VERSION = '0.5';
 
 =head1 NAME
 
@@ -24,7 +24,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.4
+Version 0.5
 
 =cut
 
@@ -371,6 +371,9 @@ sub submit {
         invoiceReferenceNumber => 'invoice_number',    ##
         lineItemData           => \@products,
         customerReference      => 'po_number',
+        discountAmount         => 'discount',
+        shippingAmount         => 'shipping',
+        dutyAmount             => 'duty',
     );
 
     tie my %card, 'Tie::IxHash', $self->revmap_fields(
@@ -420,7 +423,6 @@ sub submit {
             litleTxnId    => 'order_number',
             amount        => \$amount,
             customBilling => \%custombilling,
-            enhancedData  => \%enhanceddata,
 
             #bypassVelocityCheck => Not supported yet
         );
