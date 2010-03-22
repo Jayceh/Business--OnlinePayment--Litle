@@ -19,6 +19,7 @@ WriteMakefile(
         'XML::Simple'          => 0,
         'Tie::IxHash'          => 0,
         'Business::CreditCard' => 0,
+        'Net::SSLeay'          => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'Business-OnlinePayment-Litle-*' },
