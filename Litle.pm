@@ -394,8 +394,7 @@ sub submit {
 
     my %req;
 
-    if (   $action eq 'sale'
-        || $action eq 'authorization' )
+    if ( $action eq 'sale' )
     {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             orderId       => 'invoice_number',
@@ -406,6 +405,18 @@ sub submit {
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
             enhancedData  => \%enhanceddata,
+        );
+    }
+    if ( $action eq 'authorization' )
+    {
+        tie %req, 'Tie::IxHash', $self->revmap_fields(
+            orderId       => 'invoice_number',
+            amount        => \$amount,
+            orderSource   => 'orderSource',
+            billToAddress => \%billToAddress,
+            card          => \%card,
+            #cardholderAuthentication    =>  \%cardholderauth,
+            customBilling => \%custombilling,
         );
     }
     elsif ( $action eq 'capture' ) {
