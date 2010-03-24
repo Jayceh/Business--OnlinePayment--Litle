@@ -407,7 +407,7 @@ sub submit {
             enhancedData  => \%enhanceddata,
         );
     }
-    if ( $action eq 'authorization' )
+    elsif ( $action eq 'authorization' )
     {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             orderId       => 'invoice_number',
