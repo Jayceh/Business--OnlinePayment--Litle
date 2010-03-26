@@ -161,6 +161,7 @@ sub _info {
                 'Authorization Only',
                 'Credit',
                 'Void',
+                'Auth Reversal',
                 ],
             },
     }
@@ -357,7 +358,7 @@ sub submit {
             lineItemTotal        => 'amount',
             lineItemTotalWithTax => 'totalwithtax',
             itemDiscountAmount   => 'discount',
-            commodityCode        => 'commoditycode',
+            commodityCode        => 'code',
             unitCost             => 'cost',
           );
         push @products, \%lineitem;
@@ -468,7 +469,7 @@ sub submit {
     $writer->startTag(
         $content{'TransactionType'},
         id          => $content{'invoice_number'},
-        reportGroup => "Test",
+        reportGroup => $content{'report_group'} || 'BOP',
         customerId  => $content{'customer_id'} || 1, 
     );
     foreach ( keys(%req) ) {
@@ -604,7 +605,7 @@ Jason Hall, C<< <jayce at lug-nut.com> >>
 
 =head1 UNIMPLEMENTED
 
-Cretain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
+Certain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
    
     Force Capture
     Capture Given Auth
