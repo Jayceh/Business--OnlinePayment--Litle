@@ -60,24 +60,27 @@ my %orig_content = (
     ship_state     => 'UT',
     ship_zip       => '84058',
     ship_country   => 'US',      # will be forced to USA
+    tax            => 0,
     products        =>  [
     {   description =>  'First Product',
-        sku         =>  'sku',
         quantity    =>  1,
         units       =>  'Months',
         amount      =>  500,
         discount    =>  0,
         code        =>  1,
         cost        =>  500,
+        tax         =>  0,
+        totalwithtax => 500,
     },
     {   description =>  'Second Product',
-        sku         =>  'sku',
         quantity    =>  1,
         units       =>  'Months',
         amount      =>  1500,
         discount    =>  0,
         code        =>  2,
         cost        =>  500,
+        tax         =>  0,
+        totalwithtax => 1500,
     }
 
     ],
@@ -97,7 +100,7 @@ SKIP: {
         $content{'expiration'} = $account->{'ExpDate'};
         $content{'cvv2'} = $account->{'CardValidation'};
         $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
-        $content{'invoice_number'} = $account->{'OrderId'};
+        $content{'invoice_number'} = time;
         ## get the response validation set for this order
         my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
         $content{'name'} = $address->{'Name'};
@@ -138,7 +141,7 @@ SKIP: {
     foreach my $account ( @{$data->{'auth_reversal_info'}} ){
         $content{'action'} = 'Auth Reversal';
         $content{'amount'} = $account->{'Auth Amount'};
-        $content{'invoice_number'} = $account->{'Order ID'};
+        $content{'invoice_number'} = time;
         $content{'order_number'} = $auth_resp{ $account->{'Order ID'} } if $auth_resp{ $account->{'Order ID'} };
         ## get the response validation set for this order
         my ($resp_validation) = grep { $_->{'Order ID'} ==  $account->{'Order ID'} } @{ $data->{'auth_reversal_response'} };
@@ -156,12 +159,90 @@ SKIP: {
     }
 }
 
+    %auth_resp = ();
+SKIP: {
+    skip "No Test Account setup",54 if ! $authed;
+    my %content = %orig_content;
+### Litle AUTH Tests
+    print '-'x70;
+    print "AUTH TESTS\n";
+    foreach my $account ( @{$data->{'account'}} ){
+        $content{'amount'} = $account->{'Amount'};
+        $content{'type'} = $account->{'CardType'};
+        $content{'card_number'} = $account->{'AccountNumber'};
+        $content{'expiration'} = $account->{'ExpDate'};
+        $content{'cvv2'} = $account->{'CardValidation'};
+        $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
+        $content{'invoice_number'} = time;
+        ## get the response validation set for this order
+        my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
+        $content{'name'} = $address->{'Name'};
+        $content{'address'} = $address->{'Address1'};
+        $content{'address2'} = $address->{'Address2'};
+        $content{'city'} = $address->{'City'};
+        $content{'state'} = $address->{'State'};
+        $content{'state'} = $address->{'State'};
+        $content{'zip'} = $address->{'Zip'};
+
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'auth_response'} };
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Auth Only",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'Response Code'},
+                error_message => $resp_validation->{'Message'},
+                authorization => $resp_validation->{'Auth Code'},
+                avs_code      => $resp_validation->{'AVS Result'},
+                cvv2_response => $resp_validation->{'Card Validation Result'},
+            );
+
+            $auth_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        }
+    }
+}
+
+print '-'x70;
+print "CAPTURE\n";
+
+my %cap_resp = ();
+
+SKIP: {
+    skip "No Test Account setup",15 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'account'}} ){
+        next if $account->{'OrderId'} > 5; #can only capture first 5
+        $content{'action'} = 'Post Authorization';
+        $content{'amount'} = $account->{'Amount'};
+        $content{'invoice_number'} = time;
+        $content{'order_number'} = $auth_resp{ $account->{'OrderId'} };
+
+        ## get the response validation set for this order
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'capture'} };
+        #print Dumper(\%content);
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Capture",
+                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'ResponseCode'},
+                error_message => $resp_validation->{'Message'},
+            );
+            $cap_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        }
+    }
+}
+
 print '-'x70;
 print "SALE\n";
 my %sale_resp = ();
 SKIP: {
     skip "No Test Account setup",54 if ! $authed;
-%content = %orig_content;
+    %content = %orig_content;
 
     foreach my $account ( @{$data->{'account'}} ){
         $content{'action'} = 'Normal Authorization';
@@ -171,7 +252,7 @@ SKIP: {
         $content{'expiration'} = $account->{'ExpDate'};
         $content{'cvv2'} = $account->{'CardValidation'};
         $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
-        $content{'invoice_number'} = $account->{'OrderId'};
+        $content{'invoice_number'} = time;
         ## get the response validation set for this order
         my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
         $content{'name'} = $address->{'Name'};
@@ -202,39 +283,6 @@ SKIP: {
     }
 }
 print '-'x70;
-print "CAPTURE\n";
-
-my %cap_resp = ();
-
-SKIP: {
-    skip "No Test Account setup",15 if ! $authed;
-    %content = %orig_content;
-    foreach my $account ( @{$data->{'account'}} ){
-        next if $account->{'OrderId'} > 5; #can only capture first 5
-        $content{'action'} = 'Post Authorization';
-        $content{'amount'} = $account->{'Amount'};
-        $content{'invoice_number'} = $account->{'OrderId'};
-        $content{'order_number'} = $auth_resp{ $account->{'OrderId'} };
-
-        ## get the response validation set for this order
-        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'capture'} };
-        #print Dumper(\%content);
-        {
-            my $tx = Business::OnlinePayment->new("Litle", @opts);
-            $tx->content(%content);
-            tx_check(
-                $tx,
-                desc          => "Capture",
-                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-                result_code   => $resp_validation->{'ResponseCode'},
-                error_message => $resp_validation->{'Message'},
-            );
-            $cap_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
-        }
-    }
-}
-
-print '-'x70;
 print "CREDIT\n";
 
 SKIP: {
@@ -244,7 +292,7 @@ SKIP: {
         next if $account->{'OrderId'} > 5;
         $content{'action'} = 'Credit';
         $content{'amount'} = $account->{'Amount'};
-        $content{'invoice_number'} = $account->{'OrderId'};
+        $content{'invoice_number'} = time;
         $content{'order_number'} = $cap_resp{ $account->{'OrderId'} };
 
         ## get the response validation set for this order
@@ -275,7 +323,7 @@ SKIP: {
         next if $account->{'OrderId'} > 5;
         $content{'action'} = 'Void';
         $content{'amount'} = $account->{'Amount'};
-        $content{'invoice_number'} = $account->{'OrderId'};
+        $content{'invoice_number'} = time;
         ## void from the sales tests, so they are active, and we can do the 6th test
         $content{'order_number'} = $sale_resp{ $account->{'OrderId'} } if $sale_resp{ $account->{'OrderId'} };
 
