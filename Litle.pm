@@ -16,7 +16,7 @@ use Data::Dumper;
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.5';
+$VERSION = '0.6';
 
 =head1 NAME
 
@@ -24,7 +24,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.5
+Version 0.6
 
 =cut
 
@@ -448,7 +448,7 @@ sub submit {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             litleTxnId    => 'order_number',
-            amount        => 'amount',
+            amount        => \$amount,
         );
 
     }
