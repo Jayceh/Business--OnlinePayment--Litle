@@ -346,6 +346,7 @@ sub submit {
     #
     my @products = ();
     foreach my $prod ( @{ $content{'products'} } ) {
+        $prod->{'description'} = substr($prod->{'description'}, 0, 25);
         tie my %lineitem, 'Tie::IxHash',
           $self->revmap_fields(
             content              => $prod,

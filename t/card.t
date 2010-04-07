@@ -500,30 +500,30 @@ $data= {
                                     {
                                       'Order ID' => '1',
                                       'Payment Type' => 'VI',
-                                      'Capture Amount' => '5005',
-                                      'Reversal Amount' => '5005',
+                                      'Capture Amount' => '50.05',
+                                      'Reversal Amount' => '50.05',
                                       'Auth Amount' => '10010'
                                     },
                                     {
                                       'Order ID' => '2',
                                       'Payment Type' => 'MC',
                                       'Capture Amount' => '',
-                                      'Reversal Amount' => '20020',
-                                      'Auth Amount' => '20020'
+                                      'Reversal Amount' => '200.20',
+                                      'Auth Amount' => '200.20'
                                     },
                                     {
                                       'Order ID' => '3',
                                       'Payment Type' => 'DI',
                                       'Capture Amount' => 'N/A',
-                                      'Reversal Amount' => '10000',
-                                      'Auth Amount' => '30030'
+                                      'Reversal Amount' => '100.00',
+                                      'Auth Amount' => '300.30'
                                     },
                                     {
                                       'Order ID' => '4',
                                       'Payment Type' => 'AX',
-                                      'Capture Amount' => '20020',
-                                      'Reversal Amount' => '20020',
-                                      'Auth Amount' => '40040'
+                                      'Capture Amount' => '200.20',
+                                      'Reversal Amount' => '200.20',
+                                      'Auth Amount' => '400.40'
                                     }
                                   ],
           'void_response' => [
