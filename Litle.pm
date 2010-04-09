@@ -220,6 +220,7 @@ sub map_fields {
         'void'                 => 'void',
         'credit'               => 'credit',
         'auth reversal'        => 'authReversal',
+        'account update'       => 'accountUpdate',
 
         # AVS ONLY
         # Capture Given
@@ -265,6 +266,9 @@ sub map_fields {
         foreach ( @{ $content{'products'} } ) {
             $_->{'itemSequenceNumber'} = $count++;
         }
+    }
+    if($content{'cvv2'} && length( $content{'cvv2'} ) > 4 ){
+      croak "CVV2 has too many characters";
     }
     $self->content(%content);
 }
@@ -451,7 +455,13 @@ sub submit {
             litleTxnId    => 'order_number',
             amount        => \$amount,
         );
-
+    }
+    elsif ( $action eq 'accountUpdate' ) {
+        push @required_fields, qw( order_number );
+        tie %req, 'Tie::IxHash', $self->revmap_fields(
+            orderId =>  'invoice_number',
+            card    =>  \$card,
+        );
     }
 
     $self->required_fields(@required_fields);
