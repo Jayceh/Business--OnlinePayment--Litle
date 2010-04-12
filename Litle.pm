@@ -196,11 +196,12 @@ sub set_defaults {
 
     $self->build_subs(
         qw( order_number md5 avs_code cvv2_response
-          cavv_response api_version xmlns failure_status
+          cavv_response api_version xmlns failure_status batch_api_version
           )
     );
 
     $self->api_version('7.2')                   unless $self->api_version;
+    $self->batch_api_version('7.0')             unless $self->batch_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
 
@@ -579,7 +580,61 @@ sub add_item {
 }
 
 sub create_batch {
-    my $self = shift;
+    my ($self) = @_;
+    if ($self->test_transaction()) {
+        $self->server('cert.litle.com');    ## alternate host for processing
+    }
+    $self->is_success(0);
+
+    my $post_data;
+
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf8',
+    );
+    ## set the authentication data 
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        user     => 'login',
+        password => 'password',
+      );
+
+    ## Start the XML Document, parent tag
+    $writer->xmlDecl();
+    $writer->startTag(
+        "litleRequest",
+        version    => $self->batch_api_version,
+        xmlns      => $self->xmlns,
+        id         => ,
+        numBatchRequests => 1, #hardcoded for now, not doing multiple merchants
+    );
+
+    ## authentication
+    $self->_xmlwrite( $writer, 'authentication', \%authentication );
+    ## batch Request tag
+    $writer->startTag(
+        'batchRequest',
+        id                => time, # batch id?
+        numAccountUpdates => 1,#scalar( @{ $self->{'batch_entries'} } ),
+        customerId        => '',#$content{'merchantid'},
+    );
+
+    foreach my $entry ( @{ $self->{'batch_entries'} } ) {
+        $self->content( %{ $entry } );
+        my %content = $self->content;
+        my $req = $self->map_request( \%content );
+        foreach ( keys( %{$req} ) ) {
+                $self->_xmlwrite( $writer, $_, $req->{$_} );
+        }
+        ## need to also handle the action tag here, and custid info
+    }
+    $writer->endTag("batchRequest");
+    $writer->endTag("litleRequest");
+    $writer->end();
+    ## END XML Generation
+    print $post_data;
 }
 
 sub revmap_fields {
