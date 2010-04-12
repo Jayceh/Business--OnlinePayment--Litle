@@ -12,6 +12,7 @@ use XML::Simple;
 use Tie::IxHash;
 use Business::CreditCard qw(cardtype);
 use Data::Dumper;
+use Carp qw(croak);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
@@ -208,11 +209,9 @@ sub set_defaults {
 =cut
 
 sub map_fields {
-    my ($self) = @_;
+    my ($self, $content) = @_;
 
-    my %content = $self->content();
-
-    my $action  = lc( $content{'action'} );
+    my $action  = lc( $content->{'action'} );
     my %actions = (
         'normal authorization' => 'sale',
         'authorization only'   => 'authorization',
@@ -227,9 +226,9 @@ sub map_fields {
         # Force Capture
         #
     );
-    $content{'TransactionType'} = $actions{$action} || $action;
+    $content->{'TransactionType'} = $actions{$action} || $action;
 
-    $content{'company_phone'} =~ s/\D//g if $content{'company_phone'};
+    $content->{'company_phone'} =~ s/\D//g if $content->{'company_phone'};
 
     my $type_translate = {
         'VISA card'                   => 'VI',
@@ -241,67 +240,55 @@ sub map_fields {
         'China Union Pay'             => 'DI',
     };
 
-    $content{'card_type'} =
-         $type_translate->{ cardtype( $content{'card_number'} ) }
-      || $content{'type'};
+    $content->{'card_type'} =
+         $type_translate->{ cardtype( $content->{'card_number'} ) }
+      || $content->{'type'};
 
-    if ( $content{recurring_billing} && $content{recurring_billing} eq 'YES' ) {
-        $content{'orderSource'} = 'recurring';
+    if ( $content->{recurring_billing} && $content->{recurring_billing} eq 'YES' ) {
+        $content->{'orderSource'} = 'recurring';
     }
     else {
-        $content{'orderSource'} = 'ecommerce';
+        $content->{'orderSource'} = 'ecommerce';
     }
-    $content{'customerType'} =
-      $content{'orderSource'} eq 'recurring'
+    $content->{'customerType'} =
+      $content->{'orderSource'} eq 'recurring'
       ? 'Existing'
       : 'New';    # new/Existing
 
-    $content{'expiration'} =~ s/\D+//g;
+    $content->{'expiration'} =~ s/\D+//g;
 
-    $content{'deliverytype'} = 'SVC';
+    $content->{'deliverytype'} = 'SVC';
 
     # stuff it back into %content
-    if ( $content{'products'} && ref( $content{'products'} ) eq 'ARRAY' ) {
+    if ( $content->{'products'} && ref( $content->{'products'} ) eq 'ARRAY' ) {
         my $count = 1;
-        foreach ( @{ $content{'products'} } ) {
+        foreach ( @{ $content->{'products'} } ) {
             $_->{'itemSequenceNumber'} = $count++;
         }
     }
-    if($content{'cvv2'} && length( $content{'cvv2'} ) > 4 ){
+    if($content->{'cvv2'} && length( $content->{'cvv2'} ) > 4 ){
       croak "CVV2 has too many characters";
     }
-    $self->content(%content);
+    $self->content( %{ $content } );
+    return $content;
 }
 
-sub submit {
-    my ($self) = @_;
+sub map_request {
+    my ($self, $content) = @_;
 
-    $self->is_success(0);
-    $self->map_fields;
+    $self->map_fields($content);
 
-    if ($self->test_transaction()) {
-        $self->server('cert.litle.com');    ## alternate host for processing
-    }
-
-    my %content = $self->content();
-    my $action  = $content{'TransactionType'};
+    my $action = $content->{'TransactionType'};
 
     my @required_fields = qw(action login type);
 
     $self->required_fields(@required_fields);
-    my $post_data;
-    my $writer = new XML::Writer(
-        OUTPUT      => \$post_data,
-        DATA_MODE   => 1,
-        DATA_INDENT => 2,
-        ENCODING    => 'utf8',
-    );
 
     # for tabbing
     # clean up the amount to the required format
     my $amount;
-    if ( defined( $content{amount} ) ) {
-        $amount = sprintf( "%.2f", $content{amount} );
+    if ( defined( $content->{amount} ) ) {
+        $amount = sprintf( "%.2f", $content->{amount} );
         $amount =~ s/\.//g;
     }
 
@@ -329,16 +316,11 @@ sub submit {
         phone => 'ship_phone',
     );
 
-    tie my %authentication, 'Tie::IxHash',
-      $self->revmap_fields(
-        user     => 'login',
-        password => 'password',
-      );
 
     tie my %customerinfo, 'Tie::IxHash',
       $self->revmap_fields( customerType => 'customerType', );
 
-    my $description = substr( $content{'description'}, 0, 25 );    # schema req
+    my $description = substr( $content->{'description'}, 0, 25 );    # schema req
 
     tie my %custombilling, 'Tie::IxHash',
       $self->revmap_fields(
@@ -349,7 +331,7 @@ sub submit {
     ## loop through product list and generate linItemData for each
     #
     my @products = ();
-    foreach my $prod ( @{ $content{'products'} } ) {
+    foreach my $prod ( @{ $content->{'products'} } ) {
         $prod->{'description'} = substr($prod->{'description'}, 0, 25);
         tie my %lineitem, 'Tie::IxHash',
           $self->revmap_fields(
@@ -460,13 +442,43 @@ sub submit {
         push @required_fields, qw( order_number );
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             orderId =>  'invoice_number',
-            card    =>  \$card,
+            card    =>  \%card,
         );
     }
 
     $self->required_fields(@required_fields);
+    return \%req;
+}
 
-    #warn Dumper( \%req ) if $DEBUG;
+
+sub submit {
+    my ($self) = @_;
+
+    if ($self->test_transaction()) {
+        $self->server('cert.litle.com');    ## alternate host for processing
+    }
+    $self->is_success(0);
+
+    my %content = $self->content();
+    my $req = $self->map_request( \%content );
+    my $post_data;
+
+
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf8',
+    );
+
+    ## set the authentication data 
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        user     => 'login',
+        password => 'password',
+      );
+
+    warn Dumper( $req ) if $DEBUG;
     ## Start the XML Document, parent tag
     $writer->xmlDecl();
     $writer->startTag(
@@ -483,8 +495,8 @@ sub submit {
         reportGroup => $content{'report_group'} || 'BOP',
         customerId  => $content{'customer_id'} || 1, 
     );
-    foreach ( keys(%req) ) {
-        $self->_xmlwrite( $writer, $_, $req{$_} );
+    foreach ( keys( %{$req} ) ) {
+        $self->_xmlwrite( $writer, $_, $req->{$_} );
     }
 
     $writer->endTag( $content{'TransactionType'} );
@@ -550,6 +562,24 @@ sub submit {
         }
     }
 
+}
+
+=head1 add_item
+
+A new method, not supported under BOP yet, but interface to adding multiple entries, so we can write and interface with batches
+
+$tx->add_item( \%content );
+
+=cut
+
+sub add_item {
+    my $self = shift;
+    ## do we want to render it now, or later?
+    push @{$self->{'batch_entries'}}, shift;
+}
+
+sub create_batch {
+    my $self = shift;
 }
 
 sub revmap_fields {
