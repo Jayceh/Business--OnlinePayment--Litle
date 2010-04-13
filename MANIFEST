@@ -6,3 +6,4 @@ Litle.pm
 Litle/ErrorCodes.pm
 t/00-load.t
 t/card.t
+t/updater.t
