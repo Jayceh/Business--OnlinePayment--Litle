@@ -16,7 +16,7 @@ use Carp qw(croak);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
-$DEBUG   = 0;
+$DEBUG   = 5;
 $VERSION = '0.6';
 
 =head1 NAME
@@ -110,7 +110,7 @@ Part of the enhanced data for level III Interchange rates
     {   description =>  'First Product',
         sku         =>  'sku',
         quantity    =>  1,
-        units       =>  'Months',
+        units       =>  'Months'
         amount      =>  500,  ## currently I don't reformat this, $5.00
         discount    =>  0,
         code        =>  1,
@@ -321,7 +321,7 @@ sub map_request {
     tie my %customerinfo, 'Tie::IxHash',
       $self->revmap_fields( customerType => 'customerType', );
 
-    my $description = substr( $content->{'description'}, 0, 25 );    # schema req
+    my $description = $content->{'description'} ? substr( $content->{'description'}, 0, 25 ): '';    # schema req
 
     tie my %custombilling, 'Tie::IxHash',
       $self->revmap_fields(
@@ -440,9 +440,9 @@ sub map_request {
         );
     }
     elsif ( $action eq 'accountUpdate' ) {
-        push @required_fields, qw( order_number );
+        push @required_fields, qw( card_number expiration );
         tie %req, 'Tie::IxHash', $self->revmap_fields(
-            orderId =>  'invoice_number',
+            orderId =>  'customer_id',
             card    =>  \%card,
         );
     }
@@ -580,11 +580,17 @@ sub add_item {
 }
 
 sub create_batch {
-    my ($self) = @_;
+    my ($self, %opts) = @_;
     if ($self->test_transaction()) {
         $self->server('cert.litle.com');    ## alternate host for processing
     }
     $self->is_success(0);
+
+    if( scalar(@{ $self->{'batch_entries'} } ) < 1 ) {
+        $self->error('Cannot create an empty batch');
+        return;
+    }
+
 
     my $post_data;
 
@@ -597,6 +603,7 @@ sub create_batch {
     ## set the authentication data 
     tie my %authentication, 'Tie::IxHash',
       $self->revmap_fields(
+        content  => \%opts,
         user     => 'login',
         password => 'password',
       );
@@ -607,7 +614,7 @@ sub create_batch {
         "litleRequest",
         version    => $self->batch_api_version,
         xmlns      => $self->xmlns,
-        id         => ,
+        id         => time,
         numBatchRequests => 1, #hardcoded for now, not doing multiple merchants
     );
 
@@ -616,25 +623,86 @@ sub create_batch {
     ## batch Request tag
     $writer->startTag(
         'batchRequest',
-        id                => time, # batch id?
-        numAccountUpdates => 1,#scalar( @{ $self->{'batch_entries'} } ),
-        customerId        => '',#$content{'merchantid'},
+        id                => $opts{'batch_id'} || time,
+        numAccountUpdates => scalar( @{ $self->{'batch_entries'} } ),
+        merchantId        => $opts{'merchantid'},
     );
-
     foreach my $entry ( @{ $self->{'batch_entries'} } ) {
         $self->content( %{ $entry } );
         my %content = $self->content;
         my $req = $self->map_request( \%content );
+        $writer->startTag(
+                $content{'TransactionType'},
+                id          => $content{'invoice_number'},
+                reportGroup => $content{'report_group'} || 'BOP',
+                customerId  => $content{'customer_id'} || 1, 
+        );
         foreach ( keys( %{$req} ) ) {
                 $self->_xmlwrite( $writer, $_, $req->{$_} );
         }
+        $writer->endTag( $content{'TransactionType'} );
         ## need to also handle the action tag here, and custid info
     }
     $writer->endTag("batchRequest");
     $writer->endTag("litleRequest");
     $writer->end();
     ## END XML Generation
-    print $post_data;
+
+    #----- Send it
+    if ( $opts{'method'} && $opts{'method'} eq 'sftp' ){   #FTP
+        require Net::SFTP::Foreign;
+        my $ftp = Net::SFTP::Foreign->new("cert.litle.com", Debug => 0)
+        or die "Cannot connect to cert.litle.com: $@";
+
+        $ftp->login("anonymous",'-anonymous@')
+        or die "Cannot login ", $ftp->message;
+
+        $ftp->cwd("/inbound")
+        or die "Cannot change working directory ", $ftp->message;
+        $ftp->put()
+        or die "Cannot PUT file", $ftp->message;
+    } 
+    elsif ( $opts{'method'} && $opts{'method'} eq 'https' ){   #https post
+        $self->port('15000');
+        $self->path('/');
+        if ($self->test_transaction()) {
+            $self->server('cert.litle.com');    ## alternate host for processing
+        }
+        my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+        $self->{'_post_data'} = $post_data;
+        warn $self->{'_post_data'} if $DEBUG;
+
+        warn Dumper [ $page, $server_response, \%headers] if $DEBUG;
+
+        my $response = {};
+        if ( $server_response =~ /^200/ ) {
+           $response = XMLin($page);
+           if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
+           {
+                ## parse error type error
+                print Dumper( $response, $self->{'_post_data'} );
+                $self->error_message( $response->{'message'} );
+                return;
+           }
+           else {
+                $self->error_message( $response );
+           }
+        } else {
+                die "CONNECTION FAILURE: $server_response";
+        }
+        $self->{_response} = $response;
+        warn Dumper($response) if $DEBUG;
+        unless ( $self->is_success() ) {
+                unless ( $self->error_message() ) {
+                $self->error_message( "(HTTPS response: $server_response) "
+                        . "(HTTPS headers: "
+                        . join( ", ", map { "$_ => " . $headers{$_} } keys %headers )
+                        . ") "
+                        . "(Raw HTTPS content: $page)" );
+                }
+        }
+    }
+    
 }
 
 sub revmap_fields {
