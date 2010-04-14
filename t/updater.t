@@ -60,32 +60,25 @@ SKIP: {
         merchantid => $merchantid,
         batch_id   => $batch_id,
     );
-}
+    is( $tx->is_success, 1, "Batch Completed Correctly" );
 
-#        my ($resp_validation) = grep { $_->{'id'} ==  $account->{'id'} } @{ $data->{'updater_response'} };
-#        {
-#            tx_check(
-#                $tx,
-#                desc          => "Auth Only",
-#                is_success    => $resp_validation->{'Message'} eq 'Approved' ? 1 : 0,
-#                result_code   => $resp_validation->{'Response Code'},
-#                error_message => $resp_validation->{'Message'},
-#                authorization => $resp_validation->{'Auth Code'},
-#                avs_code      => $resp_validation->{'AVS Result'},
-#                cvv2_response => $resp_validation->{'Card Validation Result'},
-#            );
-#
-#            $auth_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
-#        }
+    foreach my $resp ( @{ $tx->get_update_response } ) {
+        my ($resp_validation) = grep { $_->{'id'} ==  $resp->invoice_number } @{ $data->{'updater_response'} };
+        tx_check(
+            $resp,
+            desc        => 'Updater check',
+            is_success  => $resp_validation->{'message'} eq 'Approved' ? 1 : 0,
+            result_code   => $resp_validation->{'code'},
+            error_message => $resp_validation->{'message'},
+        );
+    }
+}
 
 #-----------------------------------------------------------------------------------
 #
 sub tx_check {
     my $tx = shift;
     my %o  = @_;
-
-    $tx->test_transaction(1);
-    $tx->submit;
 
     is( $tx->is_success,    $o{is_success},    "$o{desc}: " . tx_info($tx) );
     is( $tx->result_code,   $o{result_code},   "result_code(): RESULT" );
@@ -113,9 +106,7 @@ sub tx_info {
             " order_number(",  $tx->order_number,  ")",
             " error_message(", $tx->error_message, ")",
             " result_code(",   $tx->result_code,   ")",
-            " auth_info(",     $tx->authorization, ")",
-            " avs_code(",      $tx->avs_code,      ")",
-            " cvv2_response(", $tx->cvv2_response, ")",
+            " invoice_number(",   $tx->invoice_number ,   ")",
         )
     );
 }
@@ -152,7 +143,7 @@ $data= {
     card  =>  'VI',
   },
   { id  =>  5,
-    account => '4457000400000006',
+    account => '4457000200400008',
     expdate => '0210',
     card  =>  'VI',
   },

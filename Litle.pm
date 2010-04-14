@@ -685,12 +685,19 @@ sub create_batch {
                 return;
            }
            else {
-                $self->error_message( $response );
+                $self->error_message( $response->{'batchResponse'}->{'message'} );
            }
         } else {
                 die "CONNECTION FAILURE: $server_response";
         }
         $self->{_response} = $response;
+
+        ##parse out the batch info as our general status
+        my $resp = $response->{'batchResponse'};
+        $self->order_number( $resp->{'litleSessionId'} );
+        $self->result_code( $response->{'response'} );
+        $self->is_success( $response->{'response'} eq '0' ? 1 : 0 );
+
         warn Dumper($response) if $DEBUG;
         unless ( $self->is_success() ) {
                 unless ( $self->error_message() ) {
@@ -701,8 +708,21 @@ sub create_batch {
                         . "(Raw HTTPS content: $page)" );
                 }
         }
+        if( $self->is_success() ) {
+            $self->{'batch_response'} = $resp;
+        }
     }
     
+}
+
+sub get_update_response {
+    my $self = shift;
+    require Business::OnlinePayment::Litle::UpdaterResponse;
+    my @response;
+    foreach my $key ( keys %{ $self->{'batch_response'}->{'accountUpdateResponse'} } ) {
+       push @response, Business::OnlinePayment::Litle::UpdaterResponse->new( $self->{'batch_response'}->{'accountUpdateResponse'}->{ $key } );
+    }
+    return \@response;
 }
 
 sub revmap_fields {
