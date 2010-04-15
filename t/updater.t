@@ -72,6 +72,21 @@ SKIP: {
             error_message => $resp_validation->{'message'},
         );
     }
+
+}
+
+{
+    my $tx = Business::OnlinePayment->new("Litle", @opts);
+    $tx->test_transaction(1);
+    $tx->send_rfr({
+        login =>  $login,
+        password   => $password,
+        merchantid => $merchantid,
+        date  => '2010-04-15',
+    });
+    is( $tx->is_success, 0, "Correctly not finished");
+    is( $tx->error_message, "The account update file is not ready yet.  Please try again later.", "Correct delay message");
+
 }
 
 #-----------------------------------------------------------------------------------

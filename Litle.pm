@@ -16,8 +16,8 @@ use Carp qw(croak);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
-$DEBUG   = 5;
-$VERSION = '0.6';
+$DEBUG   = 0;
+$VERSION = '0.7';
 
 =head1 NAME
 
@@ -565,6 +565,19 @@ sub submit {
 
 }
 
+sub parse_batch_response {
+    my ($self, $args) = @_;
+    my @results;
+    my $resp = $self->{'batch_response'};
+    $self->order_number( $resp->{'litleBatchId'} );
+    $self->invoice_num( $resp->{'id'} );
+    my @result_types = grep { $_ =~ m/Response$/ } keys %{ $resp };  ## get a list of result types in this batch
+    return {
+            'account_update'  => $self->get_update_response,
+            ## do the other response types now
+    };
+}
+
 =head1 add_item
 
 A new method, not supported under BOP yet, but interface to adding multiple entries, so we can write and interface with batches
@@ -713,6 +726,93 @@ sub create_batch {
         }
     }
     
+}
+
+sub send_rfr {
+    my ($self, $args) = @_;
+    my $post_data;
+
+    $self->is_success(0);
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf8',
+    );
+    ## set the authentication data 
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        content  => $args,
+        user     => 'login',
+        password => 'password',
+      );
+
+    ## Start the XML Document, parent tag
+    $writer->xmlDecl();
+    $writer->startTag(
+        "litleRequest",
+        version    => $self->batch_api_version,
+        xmlns      => $self->xmlns,
+        numBatchRequests => 0,
+    );
+
+    ## authentication
+    $self->_xmlwrite( $writer, 'authentication', \%authentication );
+    ## batch Request tag
+    $writer->startTag( 'RFRRequest');
+      $writer->startTag('accountUpdateFileRequestData');
+        $writer->startTag('merchantId');
+          $writer->characters( $args->{'merchantid'} );
+        $writer->endTag('merchantId');
+        $writer->startTag('postDay');
+          $writer->characters( $args->{'date'} );
+        $writer->endTag('postDay');
+      $writer->endTag('accountUpdateFileRequestData');
+    $writer->endTag("RFRRequest");
+    $writer->endTag("litleRequest");
+    $writer->end();
+    ## END XML Generation
+    #
+    $self->port('15000');
+    $self->path('/');
+    if ($self->test_transaction()) {
+        $self->server('cert.litle.com');    ## alternate host for processing
+    }
+    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+
+        $self->{'_post_data'} = $post_data;
+        warn $self->{'_post_data'} if $DEBUG;
+
+        warn Dumper [ $page, $server_response, \%headers] if $DEBUG;
+
+        my $response = {};
+        if ( $server_response =~ /^200/ ) {
+           $response = XMLin($page);
+           if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
+           {
+                ## parse error type error
+                print Dumper( $response, $self->{'_post_data'} );
+                $self->error_message( $response->{'message'} );
+                return;
+           }
+           else {
+                $self->error_message( $response->{'RFRResponse'}->{'message'} );
+           }
+        } else {
+                die "CONNECTION FAILURE: $server_response";
+        }
+        $self->{_response} = $response;
+        if($response->{'RFRResponse'}){
+            ## litle returns an 'error' if the file is not done.  So it's not ready yet.
+            $self->result_code( $response->{'RFRResponse'}->{'response'} );
+            return;
+        } else {
+            #if processed, it returns as a batch, so, success, and let get the details
+            my $resp = $response->{ 'batchResponse' };
+            $self->is_success( $resp->{'response'} eq '000' ? 1 : 0 );
+            $self->{'batch_response'} = $resp;
+            $self->parse_batch_response;
+    }
 }
 
 sub get_update_response {
