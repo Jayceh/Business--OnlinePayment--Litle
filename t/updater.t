@@ -6,6 +6,9 @@ use Data::Dumper;
 my $login = $ENV{'BOP_USERNAME'} ? $ENV{'BOP_USERNAME'} : 'TESTMERCHANT';
 my $password = $ENV{'BOP_PASSWORD'} ? $ENV{'BOP_PASSWORD'} : 'TESTPASS';
 my $merchantid = $ENV{'BOP_MERCHANTID'} ? $ENV{'BOP_MERCHANTID'} : 'TESTMERCHANTID';
+my $FTP_LOGIN =  $ENV{'FTP_LOGIN'} ? $ENV{'FTP_LOGIN'} : 'TESTMERCHANT';
+my $FTP_PASS = $ENV{'FTP_PASS'} ? $ENV{'FTP_PASS'} : 'TESTMERCHANT';
+
 my @opts = ('default_Origin' => 'RECURRING');
 
 my $str = do { local $/ = undef; <DATA> };
@@ -34,6 +37,36 @@ my %orig_content = (
 );
 
 my $batch_id = time;
+SKIP: {
+    skip "No Test Account setup",54 if ! $authed;
+### Litle Updater Tests
+    print '-'x70;
+    print "Updater SFTP TESTS\n";
+    my $tx = Business::OnlinePayment->new("Litle", @opts);
+    foreach my $account ( @{$data->{'updater_request'}} ){
+        my %content = %orig_content;
+        $content{'type'} = $account->{'card'};
+        $content{'card_number'} = $account->{'account'};
+        $content{'expiration'} = $account->{'expdate'};
+        $content{'customer_id'} = $account->{'id'};
+        $content{'invoice_number'} = $account->{'id'};
+        ## get the response validation set for this order
+        
+        $tx->add_item(\%content);
+
+    }
+    $tx->test_transaction(1);
+    $tx->create_batch( 
+        method     => 'sftp',
+        login      => $login,
+        password   => $password,
+        merchantid => $merchantid,
+        batch_id   => $batch_id,
+        ftp_username => $FTP_LOGIN,
+        ftp_password => $FTP_PASS,
+    );
+    is( $tx->is_success, 1, "Batch Completed Correctly" );
+}
 SKIP: {
     skip "No Test Account setup",54 if ! $authed;
 ### Litle Updater Tests
@@ -75,6 +108,7 @@ SKIP: {
 
 }
 
+## HTTPS RFR
 {
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     $tx->test_transaction(1);
@@ -88,6 +122,21 @@ SKIP: {
     is( $tx->error_message, "The account update file is not ready yet.  Please try again later.", "Correct delay message");
 
 }
+
+diag("Waiting for Batch processing");
+ok( sleep(90), "Wait for processing");
+{
+    my $tx = Business::OnlinePayment->new("Litle", @opts);
+    diag $batch_id;
+    my $result = $tx->retrieve_batch(
+        method     => 'sftp',
+        batch_id   => $batch_id,
+        ftp_username => $FTP_LOGIN,
+        ftp_password => $FTP_PASS,
+    );
+    print Dumper $result;
+}
+
 
 #-----------------------------------------------------------------------------------
 #

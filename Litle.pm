@@ -12,6 +12,7 @@ use XML::Simple;
 use Tie::IxHash;
 use Business::CreditCard qw(cardtype);
 use Data::Dumper;
+use IO::String;
 use Carp qw(croak);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
@@ -570,7 +571,7 @@ sub parse_batch_response {
     my @results;
     my $resp = $self->{'batch_response'};
     $self->order_number( $resp->{'litleBatchId'} );
-    $self->invoice_num( $resp->{'id'} );
+    #$self->invoice_number( $resp->{'id'} );
     my @result_types = grep { $_ =~ m/Response$/ } keys %{ $resp };  ## get a list of result types in this batch
     return {
             'account_update'  => $self->get_update_response,
@@ -627,7 +628,7 @@ sub create_batch {
         "litleRequest",
         version    => $self->batch_api_version,
         xmlns      => $self->xmlns,
-        id         => time,
+        id         => $opts{'batch_id'} || time,
         numBatchRequests => 1, #hardcoded for now, not doing multiple merchants
     );
 
@@ -664,17 +665,26 @@ sub create_batch {
     #----- Send it
     if ( $opts{'method'} && $opts{'method'} eq 'sftp' ){   #FTP
         require Net::SFTP::Foreign;
-        my $ftp = Net::SFTP::Foreign->new("cert.litle.com", Debug => 0)
-        or die "Cannot connect to cert.litle.com: $@";
+        my $sftp = Net::SFTP::Foreign->new(
+                "cert.litle.com", 
+                user     => $opts{'ftp_username'},
+                password => $opts{'ftp_password'},
+        );
+        $sftp->error and die "SSH connection failed: " . $sftp->error;
 
-        $ftp->login("anonymous",'-anonymous@')
-        or die "Cannot login ", $ftp->message;
+        $sftp->setcwd("inbound")
+          or die "Cannot change working directory ", $sftp->error;
+        ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
+        my $io = IO::String->new( $post_data );
+        tie *IO, 'IO::String';
 
-        $ftp->cwd("/inbound")
-        or die "Cannot change working directory ", $ftp->message;
-        $ftp->put()
-        or die "Cannot PUT file", $ftp->message;
-    } 
+        my $filename = $opts{'batch_id'} || $opts{'login'} . "_" . time;
+        $sftp->put( $io, "$filename.prg" )
+          or die "Cannot PUT $filename", $sftp->error;
+        $sftp->rename( "$filename.prg", "$filename.asc" ) #once complete, you rename it, for pickup
+          or die "Cannot RENAME file", $sftp->message;
+        $self->is_success(1);
+    }
     elsif ( $opts{'method'} && $opts{'method'} eq 'https' ){   #https post
         $self->port('15000');
         $self->path('/');
@@ -813,6 +823,55 @@ sub send_rfr {
             $self->{'batch_response'} = $resp;
             $self->parse_batch_response;
     }
+}
+
+sub retrieve_batch {
+    my ($self, %opts) = @_;
+    croak "Missing filename" if !$opts{'batch_id'};
+    my $post_data;
+
+        require Net::SFTP::Foreign;
+        my $sftp = Net::SFTP::Foreign->new(
+                "cert.litle.com", 
+                user     => $opts{'ftp_username'},
+                password => $opts{'ftp_password'},
+        );
+        $sftp->error and die "SSH connection failed: " . $sftp->error;
+
+        $sftp->setcwd("outbound")
+          or die "Cannot change working directory ", $sftp->error;
+        ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
+        my $io = IO::String->new( $post_data );
+        tie *IO, 'IO::String';
+
+        my $filename = $opts{'batch_id'};
+        $sftp->get( "$filename.asc", $io )
+          or die "Cannot GET $filename", $sftp->error;
+        $self->is_success(1);
+        warn $post_data if $DEBUG;
+
+        my $response = {};
+           $response = XMLin($post_data);
+           if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
+           {
+                ## parse error type error
+                print Dumper( $response, $self->{'_post_data'} );
+                $self->error_message( $response->{'message'} );
+                return;
+           }
+           else {
+                $self->error_message( $response->{'batchResponse'}->{'message'} );
+           }
+
+        $self->{_response} = $response;
+        my $resp = $response->{'batchResponse'};
+        $self->order_number( $resp->{'litleSessionId'} );
+        $self->result_code( $response->{'response'} );
+        $self->is_success( $response->{'response'} eq '0' ? 1 : 0 );
+        if( $self->is_success() ) {
+            $self->{'batch_response'} = $resp;
+            return $self->parse_batch_response;
+        }
 }
 
 sub get_update_response {
