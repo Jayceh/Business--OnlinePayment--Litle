@@ -134,7 +134,16 @@ ok( sleep(90), "Wait for processing");
         ftp_username => $FTP_LOGIN,
         ftp_password => $FTP_PASS,
     );
-    print Dumper $result;
+    foreach my $resp ( @{ $result->{'account_update'} } ) {
+        my ($resp_validation) = grep { $_->{'id'} ==  $resp->invoice_number } @{ $data->{'updater_response'} };
+        tx_check(
+            $resp,
+            desc        => 'Updater check',
+            is_success  => $resp_validation->{'message'} eq 'Approved' ? 1 : 0,
+            result_code   => $resp_validation->{'code'},
+            error_message => $resp_validation->{'message'},
+        );
+    }
 }
 
 
