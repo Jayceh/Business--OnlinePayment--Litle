@@ -21,6 +21,7 @@ sub new{
             && $args->{'updatedCard'}->{'number'} ne 'N/A'  
     ){
         $self->is_updated(1);
+        $self->is_success(1);
     } else {
         $self->is_updated(0);
     }
