@@ -38,7 +38,7 @@ my %orig_content = (
 
 my $batch_id = time;
 SKIP: {
-    skip "No Test Account setup",54 if ! $authed;
+    skip "No Test Account setup",1 if ! $authed;
 ### Litle Updater Tests
     print '-'x70;
     print "Updater SFTP TESTS\n";
@@ -67,6 +67,8 @@ SKIP: {
     );
     is( $tx->is_success, 1, "Batch Completed Correctly" );
 }
+
+diag("HTTPS POST");
 SKIP: {
     skip "No Test Account setup",54 if ! $authed;
 ### Litle Updater Tests
@@ -107,25 +109,49 @@ SKIP: {
     }
 
 }
-
+diag("HTTPS RFR");
 ## HTTPS RFR
 {
+    skip "No Test Account setup",2 if ! $authed;
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     $tx->test_transaction(1);
-    $tx->send_rfr({
-        login =>  $login,
-        password   => $password,
-        merchantid => $merchantid,
-        date  => '2010-04-15',
-    });
-    is( $tx->is_success, 0, "Correctly not finished");
-    is( $tx->error_message, "The account update file is not ready yet.  Please try again later.", "Correct delay message");
+    eval{
+     $tx->send_rfr({
+         login =>  $login,
+         password   => $password,
+         merchantid => $merchantid,
+         date  => '2010-04-15',
+     });
+     is( $tx->is_success, 0, "Correctly not finished");
+     is( $tx->error_message, "The account update file is not ready yet.  Please try again later.", "Correct delay message");
+    };
 
+}
+diag("Batch Response");
+{
+    skip "No Test Account setup",21 if ! $authed;
+    my $tx = Business::OnlinePayment->new("Litle", @opts);
+    diag $batch_id;
+    my $result = $tx->retrieve_batch(
+        batch_return => $data->{'updater_batch'},
+        batch_id   => $batch_id,
+    );
+    foreach my $resp ( @{ $result->{'account_update'} } ) {
+        my ($resp_validation) = grep { $_->{'id'} ==  $resp->invoice_number } @{ $data->{'final_response'} };
+        tx_check(
+            $resp,
+            desc        => 'Batch Response check',
+            is_success  => $resp_validation->{'message'} eq 'Approved' ? 1 : 0,
+            result_code   => $resp_validation->{'code'},
+            error_message => $resp_validation->{'message'},
+        );
+    }
 }
 
 diag("Waiting for Batch processing");
 ok( sleep(90), "Wait for processing");
 {
+    skip "No Test Account setup",30 if ! $authed;
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     diag $batch_id;
     my $result = $tx->retrieve_batch(
@@ -299,5 +325,163 @@ $data= {
    message => 'Invalid Account Number',
  },
  ],
+ 'final_response' => [
+ { id =>  1,
+   type => 'VI',
+   code =>  '506',
+   message => 'No changes found',
+ },
+ { id =>  2,
+   type => 'VI',
+   code =>  '502',
+   message => 'The expiration date was changed',
+ },
+ { id =>  3,
+   type => 'VI',
+   code =>  '501',
+   message => 'The account was closed',
+ },
+ { id =>  6,
+   type => 'MC',
+   code =>  '500',
+   message => 'The account number was changed',
+ },
+ { id =>  7,
+   type => 'MC',
+   code =>  '503',
+   message => 'The issuing bank does not participate in the update program.',
+ },
+ { id =>  8,
+   type => 'MC',
+   code =>  '504',
+   message => 'Contact the cardholder for updated information',
+ },
+ { id =>  10,
+   type => 'VI',
+   code =>  '503',
+   message => 'The issuing bank does not participate in the update program.',
+ },
+ 
+ ],
+'updater_batch' => '
+<litleResponse version="3.0" xmlns="http://www.litle.com/schema" response="0" message="Merchant Fiscal Day: 04052010" litleSessionId="27519289618">
+<batchResponse litleBatchId="27519289717" merchantId="050800">
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="1"     customerId="1">
+<litleTxnId>27200079920000</litleTxnId>
+<orderId>1</orderId>
+<response>506</response>
+<message>No changes found</message>
+<originalCard>
+<type>VISA</type>
+<number>4457010000000009</number>
+<expDate>0912</expDate>
+</originalCard>
+<updatedCard>
+<type>N/A</type>
+<number>N/A</number>
+<expDate>N/A</expDate>
+</updatedCard>
+</accountUpdateResponse>
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="2"     customerId="2">
+<litleTxnId>27200079920109</litleTxnId>
+<orderId>2</orderId>
+<response>502</response>
+<message>The expiration date was changed</message>
+<originalCard>
+<type>VISA</type>
+<number>4457003100000003</number>
+<expDate>0505</expDate>
+</originalCard>
+<updatedCard>
+<type>VISA</type>
+<number>4457003100000003</number>
+<expDate>0210</expDate>
+</updatedCard>
+</accountUpdateResponse>
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="3"     customerId="3">
+<litleTxnId>27200079920208</litleTxnId>
+<orderId>3</orderId>
+<response>501</response>
+<message>The account was closed</message>
+<originalCard>
+<type>VISA</type>
+<number>4457000300000007</number>
+<expDate>0107</expDate>
+</originalCard>
+<updatedCard>
+<type>N/A</type>
+<number>N/A</number>
+<expDate>N/A</expDate>
+</updatedCard>
+</accountUpdateResponse>
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="6"     customerId="6">
+<litleTxnId>27200079920505</litleTxnId>
+<orderId>6</orderId>
+<response>500</response>
+<message>The account number was changed</message>
+<originalCard>
+<type>MasterCard</type>
+<number>5112010000000003</number>
+<expDate>0205</expDate>
+</originalCard>
+<updatedCard>
+<type>MasterCard</type>
+<number>5112010000000999</number>
+<expDate>0212</expDate>
+</updatedCard>
+</accountUpdateResponse>
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="7"     customerId="7">
+<litleTxnId>27200079920604</litleTxnId>
+<orderId>7</orderId>
+<response>503</response>
+<message>The issuing bank does not participate in the update program.</message>
+<originalCard>
+<type>MasterCard</type>
+<number>5112002200000008</number>
+<expDate>0912</expDate>
+</originalCard>
+<updatedCard>
+<type>N/A</type>
+<number>N/A</number>
+<expDate>N/A</expDate>
+</updatedCard>
+</accountUpdateResponse>
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="8"     customerId="8">
+<litleTxnId>27200079920703</litleTxnId>
+<orderId>8</orderId>
+<response>504</response>
+<message>Contact the cardholder for updated information</message>
+<originalCard>
+<type>MasterCard</type>
+<number>5112000200000002</number>
+<expDate>0508</expDate>
+</originalCard>
+<updatedCard>
+<type>N/A</type>
+<number>N/A</number>
+<expDate>N/A</expDate>
+</updatedCard>
+</accountUpdateResponse>
+<accountUpdateResponse reportGroup="YourCompany_20100331"     id="10"     customerId="10">
+<litleTxnId>27200079920901</litleTxnId>
+<orderId>10</orderId>
+<response>503</response>
+<message>The issuing bank does not participate in the update program.</message>
+<originalCard>
+<type>VISA</type>
+<number>5112000400000018</number>
+<expDate>0210</expDate>
+</originalCard>
+<updatedCard>
+<type>N/A</type>
+<number>N/A</number>
+<expDate>N/A</expDate>
+</updatedCard>
+</accountUpdateResponse>
+</batchResponse>
+</litleResponse>
+',
+
+
 
         };

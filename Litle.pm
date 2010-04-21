@@ -789,7 +789,6 @@ sub send_rfr {
         $self->server('cert.litle.com');    ## alternate host for processing
     }
     my ( $page, $server_response, %headers ) = $self->https_post($post_data);
-
         $self->{'_post_data'} = $post_data;
         warn $self->{'_post_data'} if $DEBUG;
 
@@ -829,7 +828,11 @@ sub retrieve_batch {
     my ($self, %opts) = @_;
     croak "Missing filename" if !$opts{'batch_id'};
     my $post_data;
-
+    if( $opts{'batch_return'} ){
+        ## passed in data structure
+        $post_data = $opts{'batch_return'};
+    } else {
+        ## go download a batch
         require Net::SFTP::Foreign;
         my $sftp = Net::SFTP::Foreign->new(
                 "cert.litle.com", 
@@ -849,6 +852,7 @@ sub retrieve_batch {
           or die "Cannot GET $filename", $sftp->error;
         $self->is_success(1);
         warn $post_data if $DEBUG;
+    }
 
         my $response = {};
            $response = XMLin($post_data);
