@@ -111,7 +111,7 @@ SKIP: {
 }
 diag("HTTPS RFR");
 ## HTTPS RFR
-{
+SKIP: {
     skip "No Test Account setup",2 if ! $authed;
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     $tx->test_transaction(1);
@@ -128,7 +128,7 @@ diag("HTTPS RFR");
 
 }
 diag("Batch Response");
-{
+SKIP: {
     skip "No Test Account setup",21 if ! $authed;
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     diag $batch_id;
@@ -150,7 +150,7 @@ diag("Batch Response");
 
 diag("Waiting for Batch processing");
 ok( sleep(90), "Wait for processing");
-{
+SKIP: {
     skip "No Test Account setup",30 if ! $authed;
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     diag $batch_id;
