@@ -679,7 +679,7 @@ sub create_batch {
         tie *IO, 'IO::String';
 
         my $filename = $opts{'batch_id'} || $opts{'login'} . "_" . time;
-        $sftp->put( IO, "$filename.prg" )
+        $sftp->put( $io, "$filename.prg" )
           or die "Cannot PUT $filename", $sftp->error;
         $sftp->rename( "$filename.prg", "$filename.asc" ) #once complete, you rename it, for pickup
           or die "Cannot RENAME file", $sftp->message;
