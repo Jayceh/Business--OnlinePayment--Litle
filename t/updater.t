@@ -149,9 +149,9 @@ SKIP: {
 }
 
 diag("Waiting for Batch processing");
-ok( sleep(90), "Wait for processing");
 SKIP: {
     skip "No Test Account setup",30 if ! $authed;
+    ok( sleep(90), "Wait for processing");
     my $tx = Business::OnlinePayment->new("Litle", @opts);
     diag $batch_id;
     my $result = $tx->retrieve_batch(
