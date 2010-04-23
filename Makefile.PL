@@ -20,7 +20,7 @@ WriteMakefile(
         'Tie::IxHash'          => 0,
         'Business::CreditCard' => 0,
         'Net::SSLeay'          => 0,
-        'Net::SFTP::Foreign'   => 0,
+        'Net::SFTP::Foreign'   => '1.57',
         'IO::String'           => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
