@@ -18,7 +18,7 @@ use Carp qw(croak);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.7.1';
+$VERSION = '0.811';
 
 =head1 NAME
 
@@ -177,7 +177,7 @@ sub set_defaults {
     my $self = shift;
     my %opts = @_;
 
-    $self->server('https://payments.litle.com') unless $self->server;
+    $self->server('payments.litle.com') unless $self->server;
 
     $self->port('443')                      unless $self->port;
     $self->path('/vap/communicator/online') unless $self->path;
@@ -327,6 +327,7 @@ sub map_request {
       $content->{'description'}
       ? substr( $content->{'description'}, 0, 25 )
       : '';    # schema req
+    $description =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
 
     tie my %custombilling, 'Tie::IxHash',
       $self->revmap_fields(
@@ -339,6 +340,7 @@ sub map_request {
     my @products = ();
     foreach my $prod ( @{ $content->{'products'} } ) {
         $prod->{'description'} = substr( $prod->{'description'}, 0, 25 );
+        $prod->{'code'} = substr( $prod->{'code'}, 0, 12 );
         tie my %lineitem, 'Tie::IxHash',
           $self->revmap_fields(
             content              => $prod,
@@ -360,14 +362,14 @@ sub map_request {
     #
     #
     tie my %enhanceddata, 'Tie::IxHash', $self->revmap_fields(
-        orderDate              => 'orderdate',
-        salesTax               => 'salestax',
-        invoiceReferenceNumber => 'invoice_number',    ##
-        lineItemData           => \@products,
         customerReference      => 'po_number',
+        salesTax               => 'salestax',
         discountAmount         => 'discount',
         shippingAmount         => 'shipping',
         dutyAmount             => 'duty',
+        invoiceReferenceNumber => 'invoice_number',    ##
+        orderDate              => 'orderdate',
+        lineItemData           => \@products,
     );
 
     tie my %card, 'Tie::IxHash', $self->revmap_fields(
