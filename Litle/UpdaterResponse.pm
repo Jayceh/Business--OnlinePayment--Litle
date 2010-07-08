@@ -14,8 +14,12 @@ sub new{
     $self->result_code( $args->{'response'});
     $self->error_message( $args->{'message'});
     $self->cust_id( $args->{'customerId'});
-    $self->is_success( $self->result_code eq '000' ? 1 : 0 );
-    $self->type( $args->{'originalCard'} ? 'auth' : 'confirm' );
+    if( $self->result_code eq '500' || $self->result_code eq '502') {
+      $self->is_success(1);
+    } else {
+      $self->is_success(0);
+    }
+    $self->type( $args->{'originalCard'} ? 'confirm' : 'auth' );
     if ( $self->type eq 'confirm' 
             && $args->{'updatedCard'}->{'number'} 
             && $args->{'updatedCard'}->{'number'} ne 'N/A'  

@@ -18,7 +18,7 @@ use Carp qw(croak);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.811';
+$VERSION = '0.821';
 
 =head1 NAME
 
@@ -676,7 +676,7 @@ sub create_batch {
     if ( $opts{'method'} && $opts{'method'} eq 'sftp' ) {    #FTP
         require Net::SFTP::Foreign;
         my $sftp = Net::SFTP::Foreign->new(
-            "cert.litle.com",
+            $self->server(),
             user     => $opts{'ftp_username'},
             password => $opts{'ftp_password'},
         );
@@ -857,7 +857,7 @@ sub retrieve_batch {
         ## go download a batch
         require Net::SFTP::Foreign;
         my $sftp = Net::SFTP::Foreign->new(
-            "cert.litle.com",
+            $self->server(),
             user     => $opts{'ftp_username'},
             password => $opts{'ftp_password'},
         );
@@ -904,11 +904,10 @@ sub get_update_response {
     require Business::OnlinePayment::Litle::UpdaterResponse;
     my @response;
     foreach
-      my $key ( keys %{ $self->{'batch_response'}->{'accountUpdateResponse'} } )
+      my $item ( @{ $self->{'batch_response'}->{'accountUpdateResponse'} } )
     {
         push @response,
-          Business::OnlinePayment::Litle::UpdaterResponse->new(
-            $self->{'batch_response'}->{'accountUpdateResponse'}->{$key} );
+          Business::OnlinePayment::Litle::UpdaterResponse->new( $item );
     }
     return \@response;
 }
