@@ -18,7 +18,7 @@ use Carp qw(croak);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.821';
+$VERSION = '0.900';
 
 =head1 NAME
 
@@ -26,7 +26,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.6
+Version 0.900
 
 =cut
 
@@ -201,8 +201,8 @@ sub set_defaults {
           )
     );
 
-    $self->api_version('7.2')                   unless $self->api_version;
-    $self->batch_api_version('7.0')             unless $self->batch_api_version;
+    $self->api_version('8.1')                   unless $self->api_version;
+    $self->batch_api_version('8.1')             unless $self->batch_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
 
@@ -380,6 +380,12 @@ sub map_request {
         cardAuthentication => '3ds',          # is this what we want to name it?
     );
 
+    tie my %token, 'Tie::IxHash', $self->revmap_fields(
+        litleToken         => 'card_number',
+        expDate            => 'expiration',
+        cardValidationNum  => 'cvv2',
+    );
+
     tie my %cardholderauth, 'Tie::IxHash',
       $self->revmap_fields(
         authenticationValue         => '3ds',
@@ -397,6 +403,7 @@ sub map_request {
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
+            token         => \%token,
 
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
@@ -410,6 +417,7 @@ sub map_request {
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
+            token         => \%token,
 
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
