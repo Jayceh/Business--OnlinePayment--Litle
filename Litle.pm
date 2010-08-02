@@ -273,6 +273,15 @@ sub map_fields {
     if ( $content->{'cvv2'} && length( $content->{'cvv2'} ) > 4 ) {
         croak "CVV2 has too many characters";
     }
+
+    if( $content->{'velocity_check'} && (
+        $content->{'velocity_check'} != 0 
+        && $content->{'velocity_check'} !~ m/false/i ) ) {
+      $content->{'velocity_check'} = 'True';
+    } else {
+      $content->{'velocity_check'} = 'False';
+    }
+
     $self->content( %{$content} );
     return $content;
 }
@@ -386,6 +395,10 @@ sub map_request {
         cardValidationNum  => 'cvv2',
     );
 
+    tie my %processing, 'Tie::IxHash', $self->revmap_fields(
+        bypassVelocityCheck   => 'velocity_check',
+    );
+
     tie my %cardholderauth, 'Tie::IxHash',
       $self->revmap_fields(
         authenticationValue         => '3ds',
@@ -408,6 +421,8 @@ sub map_request {
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
             enhancedData  => \%enhanceddata,
+            processingInstructions  =>  \%processing,
+            allowPartialAuth => 'partial_auth',
         );
     }
     elsif ( $action eq 'authorization' ) {
@@ -418,9 +433,10 @@ sub map_request {
             billToAddress => \%billToAddress,
             card          => \%card,
             token         => \%token,
-
             #cardholderAuthentication    =>  \%cardholderauth,
+            processingInstructions  =>  \%processing,
             customBilling => \%custombilling,
+            allowPartialAuth => 'partial_auth',
         );
     }
     elsif ( $action eq 'capture' ) {
@@ -430,6 +446,7 @@ sub map_request {
             litleTxnId   => 'order_number',
             amount       => \$amount,
             enhancedData => \%enhanceddata,
+            processingInstructions  =>  \%processing,
           );
     }
     elsif ( $action eq 'credit' ) {
@@ -438,14 +455,16 @@ sub map_request {
             litleTxnId    => 'order_number',
             amount        => \$amount,
             customBilling => \%custombilling,
-
-            #bypassVelocityCheck => Not supported yet
+            processingInstructions  =>  \%processing,
         );
     }
     elsif ( $action eq 'void' ) {
         push @required_fields, qw( order_number );
         tie %req, 'Tie::IxHash',
-          $self->revmap_fields( litleTxnId => 'order_number', );
+          $self->revmap_fields( 
+            litleTxnId              => 'order_number', 
+            processingInstructions  =>  \%processing,
+          );
     }
     elsif ( $action eq 'authReversal' ) {
         push @required_fields, qw( order_number amount );
