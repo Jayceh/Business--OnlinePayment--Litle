@@ -282,6 +282,14 @@ sub map_fields {
       $content->{'velocity_check'} = 'False';
     }
 
+    if( $content->{'partial_auth'} && (
+        $content->{'partial_auth'} != 0 
+        && $content->{'partial_auth'} !~ m/false/i ) ) {
+      $content->{'partial_auth'} = 'True';
+    } else {
+      $content->{'partial_auth'} = 'False';
+    }
+
     $self->content( %{$content} );
     return $content;
 }
