@@ -36,7 +36,7 @@ my %orig_content = (
     password       => $password,
     merchantid      =>  $merchantid,
     action         => 'Authorization Only', #'Normal Authorization',
-    description    => 'FST*BusinessOnlinePayment',
+    description    => 'BLU*BusinessOnlinePayment',
 #    card_number    => '4007000000027',
     card_number    => '4457010000000009',
     cvv2           => '123',
@@ -85,6 +85,52 @@ my %orig_content = (
 
     ],
 );
+
+    %auth_resp = ();
+SKIP: {
+    skip "No Test Account setup",54 if ! $authed;
+    my %content = %orig_content;
+### Litle AUTH Tests
+    print '-'x70;
+    print "PARTIAL AUTH TESTS\n";
+    foreach my $account ( @{$data->{'partial_account'}} ){
+        $content{'amount'} = $account->{'Amount'};
+        $content{'type'} = $account->{'CardType'};
+        $content{'card_number'} = $account->{'AccountNumber'};
+        $content{'expiration'} = $account->{'ExpDate'};
+        $content{'cvv2'} = $account->{'CardValidation'};
+        $content{'cvv2'} = '' if $content{'cvv2'} eq 'blank';
+        $content{'invoice_number'} = time;
+        ## get the response validation set for this order
+        my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
+        $content{'name'} = $address->{'Name'};
+        $content{'address'} = $address->{'Address1'};
+        $content{'address2'} = $address->{'Address2'};
+        $content{'city'} = $address->{'City'};
+        $content{'state'} = $address->{'State'};
+        $content{'state'} = $address->{'State'};
+        $content{'zip'} = $address->{'Zip'};
+        $content{'partial_auth'} = 1;
+
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'partial_auth_response'} };
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Auth Only",
+                is_success    => $resp_validation->{'Message'} eq 'Partially Approved' ? 1 : 0,
+                result_code   => $resp_validation->{'Response Code'},
+                error_message => $resp_validation->{'Message'},
+                #authorization => $resp_validation->{'Auth Code'},
+                approved_amount => $resp_validation->{'ApprovedAmount'},
+            );
+
+            $auth_resp{ $account->{'OrderId'} } = $tx->order_number if $tx->is_success;
+        }
+    }
+}
+
 
     my %auth_resp = ();
 SKIP: {
@@ -411,6 +457,8 @@ SKIP: {
         }
     }
 }
+
+
 print '-'x70;
 print "3DS Responses\n";
 print "################# NOT Supported yet\n";
@@ -465,6 +513,9 @@ sub tx_check {
     if( $o{cvv2_response} ){
         is( $tx->cvv2_response, $o{cvv2_response}, "cvv2_response() / CVV2MATCH" );
     }
+    if( $o{approved_amount} ){
+        is( $tx->{_response}->{approvedAmount}, $o{approved_amount}, "approved_amount() / Partial Approval Amount" );
+    }
     like( $tx->order_number, qr/^\w{5,19}/, "order_number() / PNREF" );
 }
 
@@ -496,6 +547,74 @@ sub expiration_date {
 
 __DATA__
 $data= {
+          'partial_auth_response' => [
+                               {
+                                 'Response Code' => '010',
+                                 'OrderId' => '10',
+                                 'Message' => 'Partially Approved',
+                                 'Auth Code' => '11111',
+                                 'ApprovedAmount' => '32000',
+                               },
+                               {
+                                 'Response Code' => '010',
+                                 'OrderId' => '11',
+                                 'Message' => 'Partially Approved',
+                                 'Auth Code' => '11111',
+                                 'ApprovedAmount' => '48000',
+                               },
+                               {
+                                 'Response Code' => '010',
+                                 'OrderId' => '12',
+                                 'Message' => 'Partially Approved',
+                                 'Auth Code' => '11111',
+                                 'ApprovedAmount' => '40000',
+                               },
+                               {
+                                 'Response Code' => '010',
+                                 'OrderId' => '13',
+                                 'Message' => 'Partially Approved',
+                                 'Auth Code' => '12522',
+                                 'ApprovedAmount' => '12000',
+                               },
+                             ],
+          'partial_account' => [
+                         {
+                           'Amount' => '400.00',
+                           'CardType' => 'VI',
+                           'OrderId' => '10',
+                           'AccountNumber' => '4457010140000141',
+                           'ExpDate' => '0912',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'Amount' => '600.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '11',
+                           'AccountNumber' => '5112010140000004',
+                           'ExpDate' => '1111',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'Amount' => '500.00',
+                           'CardType' => 'AX',
+                           'OrderId' => '12',
+                           'AccountNumber' => '375001014000009',
+                           'ExpDate' => '0412',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'Amount' => '150.00',
+                           'CardType' => 'DI',
+                           'OrderId' => '13',
+                           'AccountNumber' => '6011010140000004',
+                           'ExpDate' => '0812',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                       ],
           'auth_reversal_info' => [
                                     {
                                       'Order ID' => '1',
