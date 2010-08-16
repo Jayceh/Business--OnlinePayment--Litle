@@ -277,17 +277,17 @@ sub map_fields {
     if( $content->{'velocity_check'} && (
         $content->{'velocity_check'} != 0 
         && $content->{'velocity_check'} !~ m/false/i ) ) {
-      $content->{'velocity_check'} = 'True';
+      $content->{'velocity_check'} = 'true';
     } else {
-      $content->{'velocity_check'} = 'False';
+      $content->{'velocity_check'} = 'false';
     }
 
     if( $content->{'partial_auth'} && (
         $content->{'partial_auth'} != 0 
         && $content->{'partial_auth'} !~ m/false/i ) ) {
-      $content->{'partial_auth'} = 'True';
+      $content->{'partial_auth'} = 'true';
     } else {
-      $content->{'partial_auth'} = 'False';
+      $content->{'partial_auth'} = 'false';
     }
 
     $self->content( %{$content} );
@@ -398,7 +398,7 @@ sub map_request {
     );
 
     tie my %token, 'Tie::IxHash', $self->revmap_fields(
-        litleToken         => 'card_number',
+        litleToken         => 'token',
         expDate            => 'expiration',
         cardValidationNum  => 'cvv2',
     );
@@ -424,7 +424,7 @@ sub map_request {
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
-            token         => \%token,
+            token         => $content->{'token'} ? \%token : {},
 
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
@@ -440,7 +440,7 @@ sub map_request {
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
-            token         => \%token,
+            token         => $content->{'token'} ? \%token : {},
             #cardholderAuthentication    =>  \%cardholderauth,
             processingInstructions  =>  \%processing,
             customBilling => \%custombilling,
@@ -537,6 +537,7 @@ sub submit {
         id          => $content{'invoice_number'},
         reportGroup => $content{'report_group'} || 'BOP',
         customerId  => $content{'customer_id'} || 1,
+        #partial     => $content{'partial'} ? 'true' : 'false',
     );
     foreach ( keys( %{$req} ) ) {
         $self->_xmlwrite( $writer, $_, $req->{$_} );
@@ -578,6 +579,7 @@ sub submit {
 
     ## Set up the data:
     my $resp = $response->{ $content{'TransactionType'} . 'Response' };
+    $self->{_response} = $resp;
     $self->order_number( $resp->{'litleTxnId'} || '' );
     $self->result_code( $resp->{'response'}    || '' );
     $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
@@ -587,6 +589,10 @@ sub submit {
     $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '' );
 
     $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
+    if( $self->result_code() eq '010' ) {
+      # Partial approval, if they chose that option
+      $self->is_success(1);
+    }
 
     ##Failure Status for 3.0 users
     if ( !$self->is_success ) {
