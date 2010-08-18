@@ -198,6 +198,7 @@ sub set_defaults {
     $self->build_subs(
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version
+          is_prepaid prepaid_balance get_affluence
           )
     );
 
@@ -587,7 +588,21 @@ sub submit {
     $self->cvv2_response( $resp->{'fraudResult'}->{'cardValidationResult'}
           || '' );
     $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '' );
+    if( $resp->{enhancedAuthResponse}
+        && $resp->{enhancedAuthResponse}->{fundingSource} 
+        && $resp->{enhancedAuthResponse}->{fundingSource}->{type} eq 'PREPAID' ) {
 
+      $self->is_prepaid(1);
+      $self->prepaid_balance( $resp->{enhancedAuthResponse}->{fundingSource}->{availableBalance} );
+    } else {
+      $self->is_prepaid(0);
+    }
+
+    if( $resp->{enhancedAuthResponse}
+        && $resp->{enhancedAuthResponse}->{affluence} 
+      ){
+      $self->get_affluence( $resp->{enhancedAuthResponse}->{affluence} );
+    }
     $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
     if( $self->result_code() eq '010' ) {
       # Partial approval, if they chose that option
