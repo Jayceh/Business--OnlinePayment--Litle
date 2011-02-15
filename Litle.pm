@@ -563,7 +563,7 @@ sub submit {
         if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
-            print Dumper( $response, $self->{'_post_data'} );
+            warn Dumper( $response, $self->{'_post_data'} );
             $self->error_message( $response->{'message'} );
             return;
         }
@@ -774,7 +774,7 @@ sub create_batch {
                 && $response->{'response'} == 1 )
             {
                 ## parse error type error
-                print Dumper( $response, $self->{'_post_data'} );
+                warn Dumper( $response, $self->{'_post_data'} );
                 $self->error_message( $response->{'message'} );
                 return;
             }
@@ -876,7 +876,7 @@ sub send_rfr {
         if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
-            print Dumper( $response, $self->{'_post_data'} );
+            warn Dumper( $response, $self->{'_post_data'} );
             $self->error_message( $response->{'message'} );
             return;
         }
@@ -938,7 +938,7 @@ sub retrieve_batch {
     $response = XMLin($post_data);
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
-        print Dumper( $response, $self->{'_post_data'} );
+        warn Dumper( $response, $self->{'_post_data'} );
         $self->error_message( $response->{'message'} );
         return;
     }
