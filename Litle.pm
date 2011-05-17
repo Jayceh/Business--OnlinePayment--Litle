@@ -313,6 +313,12 @@ sub map_request {
         $amount = sprintf( "%.2f", $content->{amount} );
         $amount =~ s/\.//g;
     }
+    ## need to turn this into a generic method in next .rev
+    #  put in a list of constraints
+    $content->{'city'} = substr($content->{'city'}, 0, 35);
+    $content->{'address'} = substr($content->{'address'}, 0, 35);
+    $content->{'state'} = substr($content->{'state'}, 0, 30);
+    $content->{'name'} = substr($content->{'name'}, 0, 100);
 
     tie my %billToAddress, 'Tie::IxHash', $self->revmap_fields(
         name         => 'name',
@@ -599,6 +605,8 @@ sub submit {
     } else {
       $self->is_prepaid(0);
     }
+
+    $self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
 
     if( $resp->{enhancedAuthResponse}
         && $resp->{enhancedAuthResponse}->{affluence} 
