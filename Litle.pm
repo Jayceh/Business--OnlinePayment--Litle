@@ -18,7 +18,7 @@ use Carp qw(croak);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.901';
+$VERSION = '0.910';
 
 =head1 NAME
 
@@ -26,7 +26,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.900
+Version 0.910
 
 =cut
 
