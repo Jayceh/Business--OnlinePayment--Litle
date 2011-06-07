@@ -621,7 +621,7 @@ $data= {
                                       'Payment Type' => 'VI',
                                       'Capture Amount' => '50.05',
                                       'Reversal Amount' => '50.05',
-                                      'Auth Amount' => '10010'
+                                      'Auth Amount' => '100.10'
                                     },
                                     {
                                       'Order ID' => '2',
@@ -643,6 +643,13 @@ $data= {
                                       'Capture Amount' => '200.20',
                                       'Reversal Amount' => '200.20',
                                       'Auth Amount' => '400.40'
+                                    },
+                                    {
+                                      'Order ID' => '5',
+                                      'Payment Type' => 'AX',
+                                      'Capture Amount' => 'N/A',
+                                      'Reversal Amount' => '100.00',
+                                      'Auth Amount' => '205.00'
                                     }
                                   ],
           'void_response' => [
@@ -1669,9 +1676,16 @@ $data= {
                                           'Response' => '000'
                                         },
                                         {
-                                          'Message' => 'This method of payment does not support authorization reversals',
+                                        #'Message' => 'This method of payment does not support authorization reversals',
+                                          'Message' => 'Approved',
                                           'Order ID' => '4',
-                                          'Response' => '335'
-                                        }
+                                          'Response'  =>  '000',
+                                          #'Response' => '335'
+                                        },
+                                        {
+                                          'Message' => 'Reversal Amount does not match Authorization amount.',
+                                          'Order ID' => '5',
+                                          'Response' => '336'
+                                        },
                                       ]
         };

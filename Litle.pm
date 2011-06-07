@@ -313,12 +313,19 @@ sub map_request {
         $amount = sprintf( "%.2f", $content->{amount} );
         $amount =~ s/\.//g;
     }
-    ## need to turn this into a generic method in next .rev
+    
     #  put in a list of constraints
-    $content->{'city'} = substr($content->{'city'}, 0, 35);
-    $content->{'address'} = substr($content->{'address'}, 0, 35);
-    $content->{'state'} = substr($content->{'state'}, 0, 30);
-    $content->{'name'} = substr($content->{'name'}, 0, 100);
+    my @validate = (
+      [ 'city', 35 ],
+      [ 'address', 35 ],
+      [ 'state', 30 ],
+      [ 'name', 100 ],
+    );
+    foreach my $trunc ( @validate ) {
+      if( defined $content->{ $trunc->[0] } ) {
+        $content->{ $trunc->[0] } = substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
+      }
+    };
 
     tie my %billToAddress, 'Tie::IxHash', $self->revmap_fields(
         name         => 'name',
@@ -467,13 +474,31 @@ sub map_request {
           );
     }
     elsif ( $action eq 'credit' ) {
-        push @required_fields, qw( order_number amount );
-        tie %req, 'Tie::IxHash', $self->revmap_fields(
-            litleTxnId    => 'order_number',
-            amount        => \$amount,
-            customBilling => \%custombilling,
-            processingInstructions  =>  \%processing,
-        );
+
+       # IF there is a litleTxnId, it's a normal linked credit
+       if( $content->{'order_number'} ){
+          push @required_fields, qw( order_number amount );
+          tie %req, 'Tie::IxHash', $self->revmap_fields(
+              litleTxnId    => 'order_number',
+              amount        => \$amount,
+              customBilling => \%custombilling,
+              processingInstructions  =>  \%processing,
+          );
+        }
+       # ELSE it's an unlinked, which requires different data
+       else {
+          push @required_fields, qw( invoice_number amount );
+          tie %req, 'Tie::IxHash', $self->revmap_fields(
+              orderId       => 'invoice_number',
+              amount        => \$amount,
+              orderSource   => 'orderSource',
+              billToAddress => \%billToAddress,
+              card          => \%card,
+              token         => $content->{'token'} ? \%token : {},
+              customBilling => \%custombilling,
+              processingInstructions  =>  \%processing,
+          );
+       }
     }
     elsif ( $action eq 'void' ) {
         push @required_fields, qw( order_number );
@@ -541,12 +566,19 @@ sub submit {
     );
 
     $self->_xmlwrite( $writer, 'authentication', \%authentication );
+
+    ## partial capture modifier, odd location, because it modifies the start tag :(
+    my %extra;
+    if ($content{'TransactionType'} eq 'capture'){
+        $extra{'partial'} = $content{'partial'} ? 'true' : 'false';
+    }
+
     $writer->startTag(
         $content{'TransactionType'},
         id          => $content{'invoice_number'},
         reportGroup => $content{'report_group'} || 'BOP',
         customerId  => $content{'customer_id'} || 1,
-        #partial     => $content{'partial'} ? 'true' : 'false',
+        %extra,
     );
     foreach ( keys( %{$req} ) ) {
         $self->_xmlwrite( $writer, $_, $req->{$_} );
@@ -606,7 +638,7 @@ sub submit {
       $self->is_prepaid(0);
     }
 
-    $self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
+    #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
 
     if( $resp->{enhancedAuthResponse}
         && $resp->{enhancedAuthResponse}->{affluence} 
