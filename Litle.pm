@@ -963,12 +963,9 @@ sub retrieve_batch {
 
         $sftp->setcwd("outbound")
           or die "Cannot change working directory ", $sftp->error;
-        ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
-        my $io = IO::String->new($post_data);
-        tie *IO, 'IO::String';
 
         my $filename = $opts{'batch_id'};
-        $sftp->get( "$filename.asc", $io )
+        $post_data = $sftp->get_content( "$filename.asc" )
           or die "Cannot GET $filename", $sftp->error;
         $self->is_success(1);
         warn $post_data if $DEBUG;
