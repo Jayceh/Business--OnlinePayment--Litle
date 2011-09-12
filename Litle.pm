@@ -965,7 +965,7 @@ sub retrieve_batch {
           or die "Cannot change working directory ", $sftp->error;
 
         my $filename = $opts{'batch_id'};
-        $post_data = $sftp->get_content( "$filename.asc" )
+        $post_data = $sftp->get_content( $filename )
           or die "Cannot GET $filename", $sftp->error;
         $self->is_success(1);
         warn $post_data if $DEBUG;
