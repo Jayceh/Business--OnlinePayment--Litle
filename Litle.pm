@@ -320,6 +320,9 @@ sub map_request {
       [ 'address', 35 ],
       [ 'state', 30 ],
       [ 'name', 100 ],
+      [ 'affiliate', 25 ],
+      [ 'campaign', 25 ],
+      [ 'merchant_grouping_id', 25 ],
     );
     foreach my $trunc ( @validate ) {
       if( defined $content->{ $trunc->[0] } ) {
@@ -431,6 +434,30 @@ sub map_request {
         authenticatedByMerchant     => 'authenticated',
       );
 
+    tie my %recycle, 'Tie::IxHash', $self->revmap_fields(
+        recycleBy => 'recycle_by', # Merchant | Litle | None
+        recycleId => 'recycle_id',
+    );
+
+    tie my %amex_aggregate, 'Tie::IxHash', $self->revmap_fields(
+        sellerId  => 'amex_seller_id', # Merchant | Litle | None
+        sellerMerchantCategoryCode  => 'amex_merchant_code',
+    );
+
+    tie my %filtering, 'Tie::IxHash',
+      $self->revmap_fields(
+        prepaid       => 'prepaid',
+        international => 'international',
+        chargeback    => 'chargeback',
+      );
+
+    tie my %merchantdata, 'Tie::IxHash',
+      $self->revmap_fields(
+        affiliate          => 'affiliate', #max 25
+        campaign           => 'campaign',  #max 25
+        merchantGroupingID => 'merchant_grouping_id', #max 25
+      );
+
     my %req;
 
     if ( $action eq 'sale' ) {
@@ -451,16 +478,33 @@ sub map_request {
     }
     elsif ( $action eq 'authorization' ) {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
-            orderId       => 'invoice_number',
-            amount        => \$amount,
-            orderSource   => 'orderSource',
+            orderId     => 'invoice_number',
+            amount      => \$amount,
+            orderSource => 'orderSource',
+
+            #customerInfo => \%customerinfo, #billMeLater only
             billToAddress => \%billToAddress,
-            card          => \%card,
-            token         => $content->{'token'} ? \%token : {},
+
+            #shipToAddress => \%shipToAddress,
+            card => \%card,    # (card | paypal | paypage | token)
+            token => $content->{'token'} ? \%token : {},
+
+            #billMeLaterRequest => \%billmelater,
             #cardholderAuthentication    =>  \%cardholderauth,
-            processingInstructions  =>  \%processing,
+            processingInstructions => \%processing,
+
+            #pos  =>  \%pos,
             customBilling => \%custombilling,
+
+            taxType  =>  'taxtype', # payment | fee
+            #enhancedData => \%enhanceddata,
+            amexAggregatorData =>  \%amex_aggregate,
             allowPartialAuth => 'partial_auth',
+
+            #healthcareIIAS =>  \%healthcare,
+            filtering  =>  \%filtering,
+            merchantData =>  \%merchantdata,
+            recyclingRequest =>  \%recycle,
         );
     }
     elsif ( $action eq 'capture' ) {
