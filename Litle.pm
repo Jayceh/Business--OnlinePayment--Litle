@@ -597,7 +597,7 @@ sub submit {
 
     my $response = {};
     if ( $server_response =~ /^200/ ) {
-        $response = XMLin($page);
+        eval { $response = XMLin($page); };
         if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
