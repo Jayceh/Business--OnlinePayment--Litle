@@ -809,7 +809,7 @@ sub create_batch {
 
         my $response = {};
         if ( $server_response =~ /^200/ ) {
-            $response = XMLin($page);
+            eval{ $response = XMLin($page); };
             if ( exists( $response->{'response'} )
                 && $response->{'response'} == 1 )
             {
@@ -912,7 +912,7 @@ sub send_rfr {
 
     my $response = {};
     if ( $server_response =~ /^200/ ) {
-        $response = XMLin($page);
+        eval{ $response = XMLin($page); };
         if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
@@ -972,7 +972,7 @@ sub retrieve_batch {
     }
 
     my $response = {};
-    $response = XMLin($post_data);
+    eval{ $response = XMLin($post_data); };
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
         warn Dumper( $response, $self->{'_post_data'} );
