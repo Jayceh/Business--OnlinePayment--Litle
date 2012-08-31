@@ -231,8 +231,6 @@ sub map_fields {
     );
     $content->{'TransactionType'} = $actions{$action} || $action;
 
-    $content->{'company_phone'} =~ s/\D//g if $content->{'company_phone'};
-
     my $type_translate = {
         'VISA card'                   => 'VI',
         'MasterCard'                  => 'MC',
@@ -260,8 +258,6 @@ sub map_fields {
       ? 'Existing'
       : 'New';    # new/Existing
 
-    $content->{'expiration'} =~ s/\D+//g;
-
     $content->{'deliverytype'} = 'SVC';
 
     # stuff it back into %content
@@ -270,9 +266,6 @@ sub map_fields {
         foreach ( @{ $content->{'products'} } ) {
             $_->{'itemSequenceNumber'} = $count++;
         }
-    }
-    if ( $content->{'cvv2'} && length( $content->{'cvv2'} ) > 4 ) {
-        croak "CVV2 has too many characters";
     }
 
     if( $content->{'velocity_check'} && (
@@ -295,6 +288,32 @@ sub map_fields {
     return $content;
 }
 
+sub format_misc_field {
+    my ($self, $content, $trunc) = @_;
+    if( defined $content->{ $trunc->[0] } ) {
+      my $len = length( $content->{ $trunc->[0] } );
+      if ( $trunc->[3] && $trunc->[2] && $len != 0 && $len < $trunc->[2] ) {
+        # Zero is a valid length (mostly for cvv2 value)
+        croak "$trunc->[0] has too few characters";
+      }
+      elsif ( $trunc->[3] && $trunc->[1] && $len > $trunc->[1] ) {
+        croak "$trunc->[0] has too many characters";
+      }
+      $content->{ $trunc->[0] } = substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
+    }
+    elsif ( $trunc->[4] ) {
+      croak "$trunc->[0] is required";
+    }
+}
+
+sub format_amount_field {
+    my ($self, $data, $field) = @_;
+    if (defined ( $data->{$field} ) ) {
+        $data->{$field} = sprintf( "%.2f", $data->{$field} );
+        $data->{$field} =~ s/\.//g;
+    }
+}
+
 sub map_request {
     my ( $self, $content ) = @_;
 
@@ -307,25 +326,73 @@ sub map_request {
     $self->required_fields(@required_fields);
 
     # for tabbing
-    # clean up the amount to the required format
-    my $amount;
-    if ( defined( $content->{amount} ) ) {
-        $amount = sprintf( "%.2f", $content->{amount} );
-        $amount =~ s/\.//g;
+    # set dollar amounts to the required format (eg $5.00 should be 500)
+    foreach my $field ( 'amount', 'salesTax', 'discountAmount', 'shippingAmount', 'dutyAmount' ) {
+        $self->format_amount_field($content, $field);
     }
     
+    # make sure the date is in MMYY format
+    $content->{'expiration'} =~ s/^(\d{1,2})\D*\d*?(\d{2})$/$1$2/;
+
+    if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # shema req
+    $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
+
+    # only numbers are allowed in company_phone
+    my $convertPhone = {
+        'a' => 2, 'b' => 2, 'c' => 2,
+        'd' => 3, 'e' => 3, 'f' => 3,
+        'g' => 4, 'h' => 4, 'i' => 4,
+        'j' => 5, 'k' => 5, 'l' => 5,
+        'm' => 6, 'n' => 6, 'o' => 6,
+        'p' => 7, 'q' => 7, 'r' => 7, 's' => 7,
+        't' => 8, 'u' => 8, 'v' => 8,
+        'w' => 9, 'x' => 9, 'y' => 9, 'z' => 9,
+    };
+    $content->{'company_phone'} =~ s/(\D)/$$convertPhone{lc($1)}||''/eg if $content->{'company_phone'};
+
     #  put in a list of constraints
     my @validate = (
-      [ 'city', 35 ],
-      [ 'address', 35 ],
-      [ 'state', 30 ],
-      [ 'name', 100 ],
+      # field,     maxLen, minLen, errorOnLength, isRequired
+      [ 'name',       100,      0,             0, 0 ],
+      [ 'email',      100,      0,             0, 0 ],
+      [ 'address',     35,      0,             0, 0 ],
+      [ 'city',        35,      0,             0, 0 ],
+      [ 'state',       30,      0,             0, 0 ], # 30 is allowed, but it should be the 2 char code
+      [ 'zip',         20,      0,             0, 0 ],
+      [ 'country',      3,      0,             0, 0 ], # should use iso 3166-1 2 char code
+      [ 'phone',       20,      0,             0, 0 ],
+
+      [ 'ship_name',  100,      0,             0, 0 ],
+      [ 'ship_email', 100,      0,             0, 0 ],
+      [ 'ship_address',35,      0,             0, 0 ],
+      [ 'ship_city',   35,      0,             0, 0 ],
+      [ 'ship_state',  30,      0,             0, 0 ], # 30 is allowed, but it should be the 2 char code
+      [ 'ship_zip',    20,      0,             0, 0 ],
+      [ 'ship_country', 3,      0,             0, 0 ], # should use iso 3166-1 2 char code
+      [ 'ship_phone',  20,      0,             0, 0 ],
+
+      #[ 'customerType',13,      0,             0, 0 ],
+
+      ['company_phone',13,      0,             0, 0 ],
+      [ 'description', 25,      0,             0, 0 ],
+
+      [ 'po_number',   17,      0,             0, 0 ],
+      [ 'salestax',     8,      0,             1, 0 ],
+      [ 'discount',     8,      0,             1, 0 ],
+      [ 'shipping',     8,      0,             1, 0 ],
+      [ 'duty',         8,      0,             1, 0 ],
+      ['invoice_number',15,     0,             0, 0 ], # TODO orderID = 25, invoiceReferenceNumber = 15
+      [ 'orderdate',   10,      0,             0, 0 ], # YYYY-MM-DD
+
+      [ 'card_type',    2,      2,             1, 0 ],
+      [ 'card_number', 25,     13,             1, 0 ],
+      [ 'expiration',   4,      4,             1, 0 ], # MMYY
+      [ 'cvv2',         4,      3,             1, 0 ],
+      # 'token' does not have a documented limit
+
+      [ 'customer_id', 25,      0,             0, 0 ],
     );
-    foreach my $trunc ( @validate ) {
-      if( defined $content->{ $trunc->[0] } ) {
-        $content->{ $trunc->[0] } = substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
-      }
-    };
+    foreach my $trunc ( @validate ) { $self->format_misc_field($content,$trunc); }
 
     tie my %billToAddress, 'Tie::IxHash', $self->revmap_fields(
         name         => 'name',
@@ -354,16 +421,10 @@ sub map_request {
     tie my %customerinfo, 'Tie::IxHash',
       $self->revmap_fields( customerType => 'customerType', );
 
-    my $description =
-      $content->{'description'}
-      ? substr( $content->{'description'}, 0, 25 )
-      : '';    # schema req
-    $description =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
-
     tie my %custombilling, 'Tie::IxHash',
       $self->revmap_fields(
         phone      => 'company_phone',
-        descriptor => \$description,
+        descriptor => 'description',
       );
 
     ## loop through product list and generate linItemData for each
@@ -371,8 +432,23 @@ sub map_request {
     my @products = ();
     if( scalar( @{ $content->{'products'} } ) < 100 ){
       foreach my $prod ( @{ $content->{'products'} } ) {
-          $prod->{'description'} = substr( $prod->{'description'}, 0, 25 );
-          $prod->{'code'} = substr( $prod->{'code'}, 0, 12 );
+          foreach my $field ( 'tax','amount','totalwithtax','discount' ) {
+            # Note: DO NOT format 'cost', it uses the decimal format
+            $self->format_amount_field($prod, $field);
+          }
+
+          my @validate = (
+            # field,     maxLen, minLen, errorOnLength, isRequired
+            [ 'description', 25,      0,             0, 0 ],
+            [ 'tax',          8,      0,             1, 0 ],
+            [ 'amount',       8,      0,             1, 0 ],
+            [ 'totalwithtax', 8,      0,             1, 0 ],
+            [ 'discount',     8,      0,             1, 0 ],
+            [ 'code',        12,      0,             0, 0 ],
+            [ 'cost',        12,      0,             1, 0 ],
+          );
+          foreach my $trunc ( @validate ) { $self->format_misc_field($prod,$trunc); }
+
           tie my %lineitem, 'Tie::IxHash',
             $self->revmap_fields(
               content              => $prod,
@@ -386,7 +462,7 @@ sub map_request {
               lineItemTotalWithTax => 'totalwithtax',
               itemDiscountAmount   => 'discount',
               commodityCode        => 'code',
-              unitCost             => 'cost',
+              unitCost             => 'cost', # This "amount" field uses decimals
             );
           push @products, \%lineitem;
       }
@@ -410,7 +486,6 @@ sub map_request {
         number             => 'card_number',
         expDate            => 'expiration',
         cardValidationNum  => 'cvv2',
-        cardAuthentication => '3ds',          # is this what we want to name it?
     );
 
     tie my %token, 'Tie::IxHash', $self->revmap_fields(
@@ -436,7 +511,7 @@ sub map_request {
     if ( $action eq 'sale' ) {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             orderId       => 'invoice_number',
-            amount        => \$amount,
+            amount        => 'amount',
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
@@ -452,7 +527,7 @@ sub map_request {
     elsif ( $action eq 'authorization' ) {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             orderId       => 'invoice_number',
-            amount        => \$amount,
+            amount        => 'amount',
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
@@ -468,7 +543,7 @@ sub map_request {
         tie %req, 'Tie::IxHash',
           $self->revmap_fields(
             litleTxnId   => 'order_number',
-            amount       => \$amount,
+            amount       => 'amount',
             enhancedData => \%enhanceddata,
             processingInstructions  =>  \%processing,
           );
@@ -480,7 +555,7 @@ sub map_request {
           push @required_fields, qw( order_number amount );
           tie %req, 'Tie::IxHash', $self->revmap_fields(
               litleTxnId    => 'order_number',
-              amount        => \$amount,
+              amount        => 'amount',
               customBilling => \%custombilling,
               processingInstructions  =>  \%processing,
           );
@@ -490,7 +565,7 @@ sub map_request {
           push @required_fields, qw( invoice_number amount );
           tie %req, 'Tie::IxHash', $self->revmap_fields(
               orderId       => 'invoice_number',
-              amount        => \$amount,
+              amount        => 'amount',
               orderSource   => 'orderSource',
               billToAddress => \%billToAddress,
               card          => \%card,
@@ -513,7 +588,7 @@ sub map_request {
         tie %req, 'Tie::IxHash',
           $self->revmap_fields(
             litleTxnId => 'order_number',
-            amount     => \$amount,
+            amount     => 'amount',
           );
     }
     elsif ( $action eq 'accountUpdate' ) {
@@ -597,8 +672,10 @@ sub submit {
 
     my $response = {};
     if ( $server_response =~ /^200/ ) {
-        eval { $response = XMLin($page); };
-        if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
+        if ( ! eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@";
+        }
+        elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
             warn Dumper( $response, $self->{'_post_data'} );
@@ -612,6 +689,8 @@ sub submit {
         }
     }
     else {
+	$server_response =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
+	if ( $server_response =~ /^900/ ) { $server_response .= ' - verify Litle has whitelisted your IP'; }
         die "CONNECTION FAILURE: $server_response";
     }
     $self->{_response} = $response;
@@ -809,8 +888,10 @@ sub create_batch {
 
         my $response = {};
         if ( $server_response =~ /^200/ ) {
-            eval{ $response = XMLin($page); };
-            if ( exists( $response->{'response'} )
+            if ( ! eval { $response = XMLin($page); } ) {
+                die "XML PARSING FAILURE: $@";
+            }
+            elsif ( exists( $response->{'response'} )
                 && $response->{'response'} == 1 )
             {
                 ## parse error type error
@@ -912,8 +993,10 @@ sub send_rfr {
 
     my $response = {};
     if ( $server_response =~ /^200/ ) {
-        eval{ $response = XMLin($page); };
-        if ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
+        if ( ! eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@";
+        }
+        elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
             warn Dumper( $response, $self->{'_post_data'} );
@@ -972,8 +1055,10 @@ sub retrieve_batch {
     }
 
     my $response = {};
-    eval{ $response = XMLin($post_data); };
-    if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
+    if ( ! eval { $response = XMLin($post_data); } ) {
+        die "XML PARSING FAILURE: $@";
+    }
+    elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
         warn Dumper( $response, $self->{'_post_data'} );
         $self->error_message( $response->{'message'} );
