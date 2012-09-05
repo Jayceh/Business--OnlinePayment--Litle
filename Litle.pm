@@ -18,7 +18,7 @@ use Carp qw(croak);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.910';
+$VERSION = '0.912';
 
 =head1 NAME
 
@@ -101,7 +101,9 @@ The following actions are valid
 
 =head2 Fields
 
-Mostdata fields nto part of the BOP standard can be added to the content hash directly, and will be used
+Most data fields not part of the BOP standard can be added to the content hash directly, and will be used
+
+Most data fields will truncate extra characters to conform to the Litle XML length requirements.  Some fields (mostly amount fields) will error if your data exceeds the allowed length.
 
 =head2 Products
 
@@ -112,10 +114,10 @@ Part of the enhanced data for level III Interchange rates
         sku         =>  'sku',
         quantity    =>  1,
         units       =>  'Months'
-        amount      =>  500,  ## currently I don't reformat this, $5.00
+        amount      =>  '5.00',
         discount    =>  0,
         code        =>  1,
-        cost        =>  500,
+        cost        =>  '5.00',
     },
     {   description =>  'Second Product',
         sku         =>  'sku',
@@ -124,7 +126,7 @@ Part of the enhanced data for level III Interchange rates
         amount      =>  1500,
         discount    =>  0,
         code        =>  2,
-        cost        =>  500,
+        cost        =>  '5.00',
     }
 
     ],
@@ -133,7 +135,7 @@ Part of the enhanced data for level III Interchange rates
 
 =head1 SPECS
 
-Currently uses the Litle XML specifications version 7.2
+Currently uses the Litle XML specifications version 8.12
 
 =head1 TESTING
 
@@ -288,10 +290,31 @@ sub map_fields {
     return $content;
 }
 
+=head2 format_misc_field
+
+Used internally to guarentee that XML data will conform to the Litle spec.
+  maxLen - The maximum length allowed (extra bytes will be truncated)
+  minLen - The minimum length allowed
+  errorOnLength - boolean
+    0 - truncate any extra bytes
+    1 - error if the length is out of bounds
+  isRequired - boolean
+    0 - ignore undefined values
+    1 - error if the value is not defined
+
+$tx->format_misc_field( \%content, [field, maxLen, minLen, errorOnLength, isRequired] );
+$tx->format_misc_field( \%content, ['amount',   0,     12,             0,          0] );
+
+=cut
+
 sub format_misc_field {
     my ($self, $content, $trunc) = @_;
+
+    use bytes; # make sure we truncate on bytes, not characters
+
     if( defined $content->{ $trunc->[0] } ) {
-      my $len = length( $content->{ $trunc->[0] } );
+      utf8::upgrade( $content->{ $trunc->[0] } );
+      my $len = bytes::length( $content->{ $trunc->[0] } );
       if ( $trunc->[3] && $trunc->[2] && $len != 0 && $len < $trunc->[2] ) {
         # Zero is a valid length (mostly for cvv2 value)
         croak "$trunc->[0] has too few characters";
@@ -299,18 +322,52 @@ sub format_misc_field {
       elsif ( $trunc->[3] && $trunc->[1] && $len > $trunc->[1] ) {
         croak "$trunc->[0] has too many characters";
       }
-      $content->{ $trunc->[0] } = substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
+      $content->{ $trunc->[0] } = bytes::substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
+      #warn "$trunc->[0] => $len => $content->{ $trunc->[0] }\n" if $DEBUG;
     }
     elsif ( $trunc->[4] ) {
       croak "$trunc->[0] is required";
     }
 }
 
+=head2 format_amount_field
+
+Used internally to change amounts from the BOP "5.00" format to the format expected by Litle "500"
+
+$tx->format_amount_field( \%content, 'amount' );
+
+=cut
+
 sub format_amount_field {
     my ($self, $data, $field) = @_;
     if (defined ( $data->{$field} ) ) {
         $data->{$field} = sprintf( "%.2f", $data->{$field} );
         $data->{$field} =~ s/\.//g;
+    }
+}
+
+=head2 format_phone_field
+
+Used internally to strip invalid characters from phone numbers. IE "1 (800).TRY-THIS" becomes "18008788447"
+
+$tx->format_phone_field( \%content, 'company_phone' );
+
+=cut
+
+sub format_phone_field {
+    my ($self, $data, $field) = @_;
+    if (defined ( $data->{$field} ) ) {
+        my $convertPhone = {
+            'a' => 2, 'b' => 2, 'c' => 2,
+            'd' => 3, 'e' => 3, 'f' => 3,
+            'g' => 4, 'h' => 4, 'i' => 4,
+            'j' => 5, 'k' => 5, 'l' => 5,
+            'm' => 6, 'n' => 6, 'o' => 6,
+            'p' => 7, 'q' => 7, 'r' => 7, 's' => 7,
+            't' => 8, 'u' => 8, 'v' => 8,
+            'w' => 9, 'x' => 9, 'y' => 9, 'z' => 9,
+        };
+        $data->{$field} =~ s/(\D)/$$convertPhone{lc($1)}||''/eg;
     }
 }
 
@@ -338,17 +395,7 @@ sub map_request {
     $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
 
     # only numbers are allowed in company_phone
-    my $convertPhone = {
-        'a' => 2, 'b' => 2, 'c' => 2,
-        'd' => 3, 'e' => 3, 'f' => 3,
-        'g' => 4, 'h' => 4, 'i' => 4,
-        'j' => 5, 'k' => 5, 'l' => 5,
-        'm' => 6, 'n' => 6, 'o' => 6,
-        'p' => 7, 'q' => 7, 'r' => 7, 's' => 7,
-        't' => 8, 'u' => 8, 'v' => 8,
-        'w' => 9, 'x' => 9, 'y' => 9, 'z' => 9,
-    };
-    $content->{'company_phone'} =~ s/(\D)/$$convertPhone{lc($1)}||''/eg if $content->{'company_phone'};
+    $self->format_phone_field($content, 'company_phone');
 
     #  put in a list of constraints
     my @validate = (
@@ -392,9 +439,13 @@ sub map_request {
 
       [ 'customer_id', 25,      0,             0, 0 ],
     );
-    foreach my $trunc ( @validate ) { $self->format_misc_field($content,$trunc); }
+    foreach my $trunc ( @validate ) {
+      $self->format_misc_field($content,$trunc);
+      #warn "$trunc->[0] => ".($content->{ $trunc->[0] }||'')."\n" if $DEBUG;
+    }
 
     tie my %billToAddress, 'Tie::IxHash', $self->revmap_fields(
+        content      => $content,
         name         => 'name',
         email        => 'email',
         addressLine1 => 'address',
@@ -407,6 +458,7 @@ sub map_request {
     );
 
     tie my %shipToAddress, 'Tie::IxHash', $self->revmap_fields(
+        content      => $content,
         name         => 'ship_name',
         email        => 'ship_email',
         addressLine1 => 'ship_address',
@@ -419,10 +471,14 @@ sub map_request {
     );
 
     tie my %customerinfo, 'Tie::IxHash',
-      $self->revmap_fields( customerType => 'customerType', );
+      $self->revmap_fields(
+        content      => $content,
+        customerType => 'customerType',
+      );
 
     tie my %custombilling, 'Tie::IxHash',
       $self->revmap_fields(
+        content      => $content,
         phone      => 'company_phone',
         descriptor => 'description',
       );
@@ -430,16 +486,18 @@ sub map_request {
     ## loop through product list and generate linItemData for each
     #
     my @products = ();
-    if( scalar( @{ $content->{'products'} } ) < 100 ){
-      foreach my $prod ( @{ $content->{'products'} } ) {
+    if( defined $content->{'products'} && scalar( @{ $content->{'products'} } ) < 100 ){
+      foreach my $prodOrig ( @{ $content->{'products'} } ) {
+          # use a local copy of prod so that we do not have issues if they try to submit more then once.
+          my %prod = %$prodOrig;
           foreach my $field ( 'tax','amount','totalwithtax','discount' ) {
             # Note: DO NOT format 'cost', it uses the decimal format
-            $self->format_amount_field($prod, $field);
+            $self->format_amount_field(\%prod, $field);
           }
 
           my @validate = (
             # field,     maxLen, minLen, errorOnLength, isRequired
-            [ 'description', 25,      0,             0, 0 ],
+            [ 'description', 26,      0,             0, 0 ],
             [ 'tax',          8,      0,             1, 0 ],
             [ 'amount',       8,      0,             1, 0 ],
             [ 'totalwithtax', 8,      0,             1, 0 ],
@@ -447,11 +505,11 @@ sub map_request {
             [ 'code',        12,      0,             0, 0 ],
             [ 'cost',        12,      0,             1, 0 ],
           );
-          foreach my $trunc ( @validate ) { $self->format_misc_field($prod,$trunc); }
+          foreach my $trunc ( @validate ) { $self->format_misc_field(\%prod,$trunc); }
 
           tie my %lineitem, 'Tie::IxHash',
             $self->revmap_fields(
-              content              => $prod,
+              content              => \%prod,
               itemSequenceNumber   => 'itemSequenceNumber',
               itemDescription      => 'description',
               productCode          => 'code',
@@ -471,6 +529,7 @@ sub map_request {
     #
     #
     tie my %enhanceddata, 'Tie::IxHash', $self->revmap_fields(
+        content                => $content,
         customerReference      => 'po_number',
         salesTax               => 'salestax',
         discountAmount         => 'discount',
@@ -482,6 +541,7 @@ sub map_request {
     );
 
     tie my %card, 'Tie::IxHash', $self->revmap_fields(
+        content            => $content,
         type               => 'card_type',
         number             => 'card_number',
         expDate            => 'expiration',
@@ -489,17 +549,20 @@ sub map_request {
     );
 
     tie my %token, 'Tie::IxHash', $self->revmap_fields(
+        content            => $content,
         litleToken         => 'token',
         expDate            => 'expiration',
         cardValidationNum  => 'cvv2',
     );
 
     tie my %processing, 'Tie::IxHash', $self->revmap_fields(
+        content               => $content,
         bypassVelocityCheck   => 'velocity_check',
     );
 
     tie my %cardholderauth, 'Tie::IxHash',
       $self->revmap_fields(
+        content                     => $content,
         authenticationValue         => '3ds',
         authenticationTransactionId => 'visaverified',
         customerIpAddress           => 'ip',
@@ -510,6 +573,7 @@ sub map_request {
 
     if ( $action eq 'sale' ) {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
+            content       => $content,
             orderId       => 'invoice_number',
             amount        => 'amount',
             orderSource   => 'orderSource',
@@ -526,12 +590,14 @@ sub map_request {
     }
     elsif ( $action eq 'authorization' ) {
         tie %req, 'Tie::IxHash', $self->revmap_fields(
+            content       => $content,
             orderId       => 'invoice_number',
             amount        => 'amount',
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
             card          => \%card,
             token         => $content->{'token'} ? \%token : {},
+
             #cardholderAuthentication    =>  \%cardholderauth,
             processingInstructions  =>  \%processing,
             customBilling => \%custombilling,
@@ -542,6 +608,7 @@ sub map_request {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
           $self->revmap_fields(
+            content      => $content,
             litleTxnId   => 'order_number',
             amount       => 'amount',
             enhancedData => \%enhanceddata,
@@ -554,6 +621,7 @@ sub map_request {
        if( $content->{'order_number'} ){
           push @required_fields, qw( order_number amount );
           tie %req, 'Tie::IxHash', $self->revmap_fields(
+              content       => $content,
               litleTxnId    => 'order_number',
               amount        => 'amount',
               customBilling => \%custombilling,
@@ -564,6 +632,7 @@ sub map_request {
        else {
           push @required_fields, qw( invoice_number amount );
           tie %req, 'Tie::IxHash', $self->revmap_fields(
+              content       => $content,
               orderId       => 'invoice_number',
               amount        => 'amount',
               orderSource   => 'orderSource',
@@ -579,6 +648,7 @@ sub map_request {
         push @required_fields, qw( order_number );
         tie %req, 'Tie::IxHash',
           $self->revmap_fields( 
+            content                 => $content,
             litleTxnId              => 'order_number', 
             processingInstructions  =>  \%processing,
           );
@@ -587,6 +657,7 @@ sub map_request {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
           $self->revmap_fields(
+            content    => $content,
             litleTxnId => 'order_number',
             amount     => 'amount',
           );
@@ -595,6 +666,7 @@ sub map_request {
         push @required_fields, qw( card_number expiration );
         tie %req, 'Tie::IxHash',
           $self->revmap_fields(
+            content => $content,
             orderId => 'customer_id',
             card    => \%card,
           );
@@ -613,7 +685,9 @@ sub submit {
     $self->is_success(0);
 
     my %content = $self->content();
+    warn 'Pre processing: '.Dumper(\%content) if $DEBUG;
     my $req     = $self->map_request( \%content );
+    warn 'Post processing: '.Dumper(\%content) if $DEBUG;
     my $post_data;
 
     my $writer = new XML::Writer(
@@ -626,6 +700,7 @@ sub submit {
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
       $self->revmap_fields(
+        content  => \%content,
         user     => 'login',
         password => 'password',
       );
@@ -664,9 +739,13 @@ sub submit {
     $writer->end();
     ## END XML Generation
 
-    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    ## Bypass a bug where XML::Writer sometimes goobers unicode data
+    ## This is an ugly hack since it is lossy
+    $post_data =~ s/\xC3//g;
+
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
+    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
 
     warn Dumper $page, $server_response, \%headers if $DEBUG;
 
@@ -689,8 +768,8 @@ sub submit {
         }
     }
     else {
-	$server_response =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
-	if ( $server_response =~ /^900/ ) { $server_response .= ' - verify Litle has whitelisted your IP'; }
+        $server_response =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
+        if ( $server_response =~ /^900/ ) { $server_response .= ' - verify Litle has whitelisted your IP'; }
         die "CONNECTION FAILURE: $server_response";
     }
     $self->{_response} = $response;
@@ -767,7 +846,7 @@ sub parse_batch_response {
     };
 }
 
-=head1 add_item
+=head2 add_item
 
 A new method, not supported under BOP yet, but interface to adding multiple entries, so we can write and interface with batches
 
@@ -1100,6 +1179,7 @@ sub revmap_fields {
         %content = %{ delete( $map{'content'} ) };
     }
     else {
+        warn "WARNING: This content has no been pre-processed with map_fields";
         %content = $self->content();
     }
 
