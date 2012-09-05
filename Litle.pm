@@ -17,7 +17,7 @@ use Carp qw(croak);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
-$DEBUG   = 0;
+$DEBUG   = 1;
 $VERSION = '0.910';
 
 =head1 NAME
@@ -198,11 +198,11 @@ sub set_defaults {
     $self->build_subs(
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version
-          is_prepaid prepaid_balance get_affluence
+          is_prepaid prepaid_balance get_affluence prepaid_reloadable prepaid_cardtype
           )
     );
 
-    $self->api_version('8.1')                   unless $self->api_version;
+    $self->api_version('8.12')                   unless $self->api_version;
     $self->batch_api_version('8.1')             unless $self->batch_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
@@ -372,7 +372,7 @@ sub map_request {
     ## loop through product list and generate linItemData for each
     #
     my @products = ();
-    if( scalar( @{ $content->{'products'} } ) < 100 ){
+    if( $content->{'products'} && scalar( @{ $content->{'products'} } ) < 100 ){
       foreach my $prod ( @{ $content->{'products'} } ) {
           $prod->{'description'} = substr( $prod->{'description'}, 0, 25 );
           $prod->{'code'} = substr( $prod->{'code'}, 0, 12 );
@@ -455,7 +455,7 @@ sub map_request {
       $self->revmap_fields(
         affiliate          => 'affiliate', #max 25
         campaign           => 'campaign',  #max 25
-        merchantGroupingID => 'merchant_grouping_id', #max 25
+        merchantGroupingId => 'merchant_grouping_id', #max 25
       );
 
     my %req;
@@ -577,7 +577,9 @@ sub submit {
     my ($self) = @_;
 
     if ( $self->test_transaction() ) {
-        $self->server('cert.litle.com');    ## alternate host for processing
+      #$self->server('cert.litle.com');    ## alternate host for processing
+        $self->server('www.testlitle.com');    ## alternate host for processing
+        $self->path('/sandbox/communicator/online');
     }
     $self->is_success(0);
 
@@ -632,8 +634,7 @@ sub submit {
     $writer->endTag("litleOnlineRequest");
     $writer->end();
     ## END XML Generation
-
-    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    my ( $page, $server_response, %headers ) = $self->https_post({headers => { 'Content-type' => 'text/xml'}}, $post_data);
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
 
@@ -678,6 +679,8 @@ sub submit {
 
       $self->is_prepaid(1);
       $self->prepaid_balance( $resp->{enhancedAuthResponse}->{fundingSource}->{availableBalance} );
+      $self->prepaid_reloadable( $resp->{enhancedAuthResponse}->{fundingSource}->{reloadable} );
+      $self->prepaid_cardtype( $resp->{enhancedAuthResponse}->{fundingSource}->{prepaidCardType} );
     } else {
       $self->is_prepaid(0);
     }

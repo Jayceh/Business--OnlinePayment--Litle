@@ -61,6 +61,9 @@ my %orig_content = (
     ship_zip       => '84058',
     ship_country   => 'US',      # will be forced to USA
     tax            => 0,
+    affiliate      => 'foohost',
+    campaign       => 'testing',
+    merchant_grouping_id => 'retry1',
     products        =>  [
     {   description =>  'First Product',
         quantity    =>  1,
@@ -460,6 +463,45 @@ SKIP: {
 
 
 print '-'x70;
+print "Prepaid Indicator Tests\n";
+
+SKIP: {
+    skip "No Test Account setup", 84 if ! $authed;
+    %content = %orig_content;
+    foreach my $account ( @{$data->{'prepaid_accounts'}} ){
+        $content{'action'} = 'Authorization Only';
+        $content{'amount'} = $account->{'amount'};
+        $content{'expiration'} = $account->{'expdate'};
+        $content{'invoice_number'} = time;
+        $content{'card_number'} = $account->{'AccountNumber'};
+
+        $content{'type'} = 'CC';
+
+        my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'prepaid_response'} };
+        ## get the response validation set for this order
+        {
+            my $tx = Business::OnlinePayment->new("Litle", @opts);
+            $tx->content(%content);
+            tx_check(
+                $tx,
+                desc          => "Prepaid Indicator " . $account->{'OrderId'},
+                is_success    => 1,
+                result_code   => $resp_validation->{'response'},
+                error_message => $resp_validation->{'message'},
+                prepaid =>  {
+                  available_balance => $resp_validation->{'available_balance'},
+                  reloadable   => $resp_validation->{'reloadable'},
+                  type  => $resp_validation->{'type'},
+                  prepaid_type => $resp_validation->{'prepaidCardType'},
+                },
+
+            );
+        }
+    }
+}
+
+
+print '-'x70;
 print "3DS Responses\n";
 print "################# NOT Supported yet\n";
 
@@ -515,6 +557,13 @@ sub tx_check {
     }
     if( $o{approved_amount} ){
         is( $tx->{_response}->{approvedAmount}, $o{approved_amount}, "approved_amount() / Partial Approval Amount" );
+    }
+
+    if( $o{prepaid} ) {
+        is( $tx->prepaid_reloadable,  $o{prepaid}->{reloadable},  "prepaid_reloadable() / Reloadable gift card" );
+        is( $tx->prepaid_balance,  $o{prepaid}->{available_balance},  "prepaid_balance() / Gift Card Available Balance" );
+        is( $tx->is_prepaid,  $o{prepaid}->{type},  "is_prepaid() / Prepaid Indicator" );
+        is( $tx->prepaid_cardtype,  $o{prepaid}->{prepaid_type},  "prepaid_cardtype() / Prepaid Card Type" );
     }
     like( $tx->order_number, qr/^\w{5,19}/, "order_number() / PNREF" );
 }
@@ -583,7 +632,7 @@ $data= {
                            'CardType' => 'VI',
                            'OrderId' => '10',
                            'AccountNumber' => '4457010140000141',
-                           'ExpDate' => '0912',
+                           'ExpDate' => '0914',
                            'CardholderAuthentication' => '',
                            'CardValidation' => ''
                          },
@@ -592,7 +641,7 @@ $data= {
                            'CardType' => 'MC',
                            'OrderId' => '11',
                            'AccountNumber' => '5112010140000004',
-                           'ExpDate' => '1111',
+                           'ExpDate' => '1114',
                            'CardholderAuthentication' => '',
                            'CardValidation' => ''
                          },
@@ -601,7 +650,7 @@ $data= {
                            'CardType' => 'AX',
                            'OrderId' => '12',
                            'AccountNumber' => '375001014000009',
-                           'ExpDate' => '0412',
+                           'ExpDate' => '0414',
                            'CardholderAuthentication' => '',
                            'CardValidation' => ''
                          },
@@ -610,7 +659,7 @@ $data= {
                            'CardType' => 'DI',
                            'OrderId' => '13',
                            'AccountNumber' => '6011010140000004',
-                           'ExpDate' => '0812',
+                           'ExpDate' => '0814',
                            'CardholderAuthentication' => '',
                            'CardValidation' => ''
                          },
@@ -777,7 +826,7 @@ $data= {
                            'CardType' => 'VI',
                            'OrderId' => '1',
                            'AccountNumber' => '4457010000000009',
-                           'ExpDate' => '0112',
+                           'ExpDate' => '0114',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '349'
                          },
@@ -786,7 +835,7 @@ $data= {
                            'CardType' => 'MC',
                            'OrderId' => '2',
                            'AccountNumber' => '5112010000000003',
-                           'ExpDate' => '0212',
+                           'ExpDate' => '0214',
                            'CardholderAuthentication' => 'BwABBJQ1AgAAAAAgJDUCAAAAAAA=',
                            'CardValidation' => '261'
                          },
@@ -795,7 +844,7 @@ $data= {
                            'CardType' => 'DI',
                            'OrderId' => '3',
                            'AccountNumber' => '6011010000000003',
-                           'ExpDate' => '0312',
+                           'ExpDate' => '0314',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '758'
                          },
@@ -804,7 +853,7 @@ $data= {
                            'CardType' => 'AX',
                            'OrderId' => '4',
                            'AccountNumber' => '375001000000005',
-                           'ExpDate' => '0412',
+                           'ExpDate' => '0414',
                            'CardholderAuthentication' => '',
                            'CardValidation' => 'blank'
                          },
@@ -813,7 +862,7 @@ $data= {
                            'CardType' => 'VI',
                            'OrderId' => '5',
                            'AccountNumber' => '4457010200000007',
-                           'ExpDate' => '0512',
+                           'ExpDate' => '0514',
                            'CardholderAuthentication' => 'BwABBJQ1AgAAAAAgJDUCAAAAAAA=',
                            'CardValidation' => '463'
                          },
@@ -822,7 +871,7 @@ $data= {
                            'CardType' => 'VI',
                            'OrderId' => '6',
                            'AccountNumber' => '4457010100000008',
-                           'ExpDate' => '0612',
+                           'ExpDate' => '0614',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '992'
                          },
@@ -831,7 +880,7 @@ $data= {
                            'CardType' => 'MC',
                            'OrderId' => '7',
                            'AccountNumber' => '5112010100000002',
-                           'ExpDate' => '0712',
+                           'ExpDate' => '0714',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '251'
                          },
@@ -840,7 +889,7 @@ $data= {
                            'CardType' => 'DI',
                            'OrderId' => '8',
                            'AccountNumber' => '6011010100000002',
-                           'ExpDate' => '0812',
+                           'ExpDate' => '0814',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '184'
                          },
@@ -849,7 +898,7 @@ $data= {
                            'CardType' => 'AX',
                            'OrderId' => '9',
                            'AccountNumber' => '375001010000003',
-                           'ExpDate' => '0912',
+                           'ExpDate' => '0914',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '0421'
                          }
@@ -1687,5 +1736,137 @@ $data= {
                                           'Order ID' => '5',
                                           'Response' => '336'
                                         },
-                                      ]
+                                      ],
+
+          'prepaid_accounts' => [
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'VI',
+                           'OrderId' => '14',
+                           'AccountNumber' => '4457010200000247',
+                           'ExpDate' => '0814',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '15',
+                           'AccountNumber' => '5500000254444445',
+                           'ExpDate' => '0314',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '16',
+                           'AccountNumber' => '5592106621450897',
+                           'ExpDate' => '0314',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '17',
+                           'AccountNumber' => '5590409551104142',
+                           'ExpDate' => '0314',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '18',
+                           'AccountNumber' => '5587755665222179',
+                           'ExpDate' => '0314',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '19',
+                           'AccountNumber' => '5445840176552850',
+                           'ExpDate' => '0314',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         {
+                           'amount' => '30.00',
+                           'CardType' => 'MC',
+                           'OrderId' => '20',
+                           'AccountNumber' => '5390016478904678',
+                           'ExpDate' => '0314',
+                           'CardholderAuthentication' => '',
+                           'CardValidation' => ''
+                         },
+                         ],
+         'prepaid_response' => [
+          {
+            OrderId =>  14,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '20.00',
+            reloadable  =>  'NO',
+            prepaidCardType =>  'GIFT',
+          },
+          {
+            OrderId =>  15,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '20.00',
+            reloadable  =>  'YES',
+            prepaidCardType =>  'PAYROLL',
+          },
+          {
+            OrderId =>  16,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '0.00',
+            reloadable  =>  'YES',
+            prepaidCardType =>  'PAYROLL',
+          },
+          {
+            OrderId =>  17,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '65.00',
+            reloadable  =>  'YES',
+            prepaidCardType =>  'PAYROLL',
+          },
+          {
+            OrderId =>  18,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '122.00',
+            reloadable  =>  'YES',
+            prepaidCardType =>  'PAYROLL',
+          },
+          {
+            OrderId =>  19,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '200.00',
+            reloadable  =>  'YES',
+            prepaidCardType =>  'PAYROLL',
+          },
+          {
+            OrderId =>  20,
+            response  =>  '000',
+            message =>  'Approved',
+            type  =>  'PREPAID',
+            availableBalance  =>  '100.50',
+            reloadable  =>  'YES',
+            prepaidCardType =>  'PAYROLL',
+          },
+         ],
+
         };
