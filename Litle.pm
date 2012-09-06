@@ -313,7 +313,6 @@ sub format_misc_field {
     use bytes; # make sure we truncate on bytes, not characters
 
     if( defined $content->{ $trunc->[0] } ) {
-      utf8::upgrade( $content->{ $trunc->[0] } );
       my $len = bytes::length( $content->{ $trunc->[0] } );
       if ( $trunc->[3] && $trunc->[2] && $len != 0 && $len < $trunc->[2] ) {
         # Zero is a valid length (mostly for cvv2 value)
@@ -738,10 +737,6 @@ sub submit {
     $writer->endTag("litleOnlineRequest");
     $writer->end();
     ## END XML Generation
-
-    ## Bypass a bug where XML::Writer sometimes goobers unicode data
-    ## This is an ugly hack since it is lossy
-    $post_data =~ s/\xC3//g;
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
@@ -1225,6 +1220,7 @@ sub _xmlwrite {
     }
     else {
         $writer->startTag($item);
+	utf8::decode($value); # prevent double byte corruption in the xml output
         $writer->characters($value);
         $writer->endTag($item);
     }
