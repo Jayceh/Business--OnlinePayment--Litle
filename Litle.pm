@@ -71,7 +71,7 @@ In order to use this module, you will need to have an account set up with Litle 
 
 =head1 METHODS AND FUNCTIONS
 
-See L<Business::OnlinePayment> for the complete list. The following methods either override the methods in L<Business::OnlinePayment> or provide additional functions.  
+See L<Business::OnlinePayment> for the complete list. The following methods either override the methods in L<Business::OnlinePayment> or provide additional functions.
 
 =head2 result_code
 
@@ -139,7 +139,7 @@ Currently uses the Litle XML specifications version 8.12
 
 =head1 TESTING
 
-In order to run the provided test suite, you will first need to apply and get your account setup with Litle.  Then you can use the test account information they give you to run the test suite.  The scripts will look for three environment variables to connect: BOP_USERNAME, BOP_PASSWORD, BOP_MERCHANTID
+In order to run the provided test suite, you will first need to apply and get your account setup with Litle.  Then you can use the test account information they give you to run the test suite. The scripts will look for three environment variables to connect: BOP_USERNAME, BOP_PASSWORD, BOP_MERCHANTID
 
 Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
 
@@ -179,10 +179,7 @@ sub set_defaults {
     my $self = shift;
     my %opts = @_;
 
-    $self->server('payments.litle.com') unless $self->server;
-
-    $self->port('443')                      unless $self->port;
-    $self->path('/vap/communicator/online') unless $self->path;
+    $self->test_transaction(0);
 
     if ( $opts{debug} ) {
         $self->debug( $opts{debug} );
@@ -207,6 +204,50 @@ sub set_defaults {
     $self->api_version('8.1')                   unless $self->api_version;
     $self->batch_api_version('8.1')             unless $self->batch_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
+}
+
+=head2 test_transaction
+
+Get/set the server used for processing transactions.  Possible values are Live, Certification, and Sandbox
+Default: Live
+
+  #Live
+  $self->test_transaction(0);
+
+  #Certification
+  $self->test_transaction(1);
+
+  #Sandbox
+  $self->test_transaction('sandbox');
+
+  #Read current value
+  $val = $self->test_transaction();
+
+=cut
+
+sub test_transaction {
+    my $self = shift;
+    my $testMode = shift;
+    if (! defined $testMode) { $testMode = $$self{'test_transaction'} || 0; }
+
+    if (lc($testMode) eq 'sandbox') {
+	$$self{'test_transaction'} = 'sandbox';
+        $self->server('www.testlitle.com');
+        $self->port('443');
+        $self->path('/sandbox/communicator/online');
+    } elsif ($testMode) {
+	$$self{'test_transaction'} = $testMode;
+        $self->server('cert.litle.com');
+        $self->port('443');
+        $self->path('/vap/communicator/online');
+    } else {
+	$$self{'test_transaction'} = 0;
+        $self->server('payments.litle.com');
+        $self->port('443');
+        $self->path('/vap/communicator/online');
+    }
+
+    return $$self{'test_transaction'};
 }
 
 =head2 map_fields
@@ -271,7 +312,7 @@ sub map_fields {
     }
 
     if( $content->{'velocity_check'} && (
-        $content->{'velocity_check'} != 0 
+        $content->{'velocity_check'} != 0
         && $content->{'velocity_check'} !~ m/false/i ) ) {
       $content->{'velocity_check'} = 'true';
     } else {
@@ -279,7 +320,7 @@ sub map_fields {
     }
 
     if( $content->{'partial_auth'} && (
-        $content->{'partial_auth'} != 0 
+        $content->{'partial_auth'} != 0
         && $content->{'partial_auth'} !~ m/false/i ) ) {
       $content->{'partial_auth'} = 'true';
     } else {
@@ -611,7 +652,7 @@ sub map_request {
             litleTxnId   => 'order_number',
             amount       => 'amount',
             enhancedData => \%enhanceddata,
-            processingInstructions  =>  \%processing,
+            processingInstructions => \%processing,
           );
     }
     elsif ( $action eq 'credit' ) {
@@ -624,7 +665,7 @@ sub map_request {
               litleTxnId    => 'order_number',
               amount        => 'amount',
               customBilling => \%custombilling,
-              processingInstructions  =>  \%processing,
+              processingInstructions => \%processing,
           );
         }
        # ELSE it's an unlinked, which requires different data
@@ -639,16 +680,16 @@ sub map_request {
               card          => \%card,
               token         => $content->{'token'} ? \%token : {},
               customBilling => \%custombilling,
-              processingInstructions  =>  \%processing,
+              processingInstructions => \%processing,
           );
        }
     }
     elsif ( $action eq 'void' ) {
         push @required_fields, qw( order_number );
         tie %req, 'Tie::IxHash',
-          $self->revmap_fields( 
+          $self->revmap_fields(
             content                 => $content,
-            litleTxnId              => 'order_number', 
+            litleTxnId              => 'order_number',
             processingInstructions  =>  \%processing,
           );
     }
@@ -678,9 +719,6 @@ sub map_request {
 sub submit {
     my ($self) = @_;
 
-    if ( $self->test_transaction() ) {
-        $self->server('cert.litle.com');    ## alternate host for processing
-    }
     $self->is_success(0);
 
     my %content = $self->content();
@@ -740,7 +778,7 @@ sub submit {
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    my ( $page, $server_response, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
 
     warn Dumper $page, $server_response, \%headers if $DEBUG;
 
@@ -782,7 +820,7 @@ sub submit {
           || '' );
     $self->avs_code( $resp->{'fraudResult'}->{'avsResult'} || '' );
     if( $resp->{enhancedAuthResponse}
-        && $resp->{enhancedAuthResponse}->{fundingSource} 
+        && $resp->{enhancedAuthResponse}->{fundingSource}
         && $resp->{enhancedAuthResponse}->{fundingSource}->{type} eq 'PREPAID' ) {
 
       $self->is_prepaid(1);
@@ -794,7 +832,7 @@ sub submit {
     #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
 
     if( $resp->{enhancedAuthResponse}
-        && $resp->{enhancedAuthResponse}->{affluence} 
+        && $resp->{enhancedAuthResponse}->{affluence}
       ){
       $self->get_affluence( $resp->{enhancedAuthResponse}->{affluence} );
     }
@@ -857,9 +895,7 @@ sub add_item {
 
 sub create_batch {
     my ( $self, %opts ) = @_;
-    if ( $self->test_transaction() ) {
-        $self->server('cert.litle.com');    ## alternate host for processing
-    }
+
     $self->is_success(0);
 
     if ( scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
@@ -943,16 +979,13 @@ sub create_batch {
         $sftp->put( $io, "$filename.prg" )
           or die "Cannot PUT $filename", $sftp->error;
         $sftp->rename( "$filename.prg",
-            "$filename.asc" )    #once complete, you rename it, for pickup
+            "$filename.asc" ) #once complete, you rename it, for pickup
           or die "Cannot RENAME file", $sftp->message;
         $self->is_success(1);
     }
     elsif ( $opts{'method'} && $opts{'method'} eq 'https' ) {    #https post
         $self->port('15000');
         $self->path('/');
-        if ( $self->test_transaction() ) {
-            $self->server('cert.litle.com');    ## alternate host for processing
-        }
         my ( $page, $server_response, %headers ) =
           $self->https_post($post_data);
         $self->{'_post_data'} = $post_data;
@@ -993,7 +1026,7 @@ sub create_batch {
         unless ( $self->is_success() ) {
             unless ( $self->error_message() ) {
                 $self->error_message(
-                        "(HTTPS response: $server_response) " 
+                        "(HTTPS response: $server_response) "
                       . "(HTTPS headers: "
                       . join( ", ",
                         map { "$_ => " . $headers{$_} } keys %headers )
@@ -1056,9 +1089,6 @@ sub send_rfr {
     #
     $self->port('15000');
     $self->path('/');
-    if ( $self->test_transaction() ) {
-        $self->server('cert.litle.com');    ## alternate host for processing
-    }
     my ( $page, $server_response, %headers ) = $self->https_post($post_data);
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
@@ -1086,7 +1116,7 @@ sub send_rfr {
     }
     $self->{_response} = $response;
     if ( $response->{'RFRResponse'} ) {
-        ## litle returns an 'error' if the file is not done.  So it's not ready yet.
+        ## litle returns an 'error' if the file is not done. So it's not ready yet.
         $self->result_code( $response->{'RFRResponse'}->{'response'} );
         return;
     }
@@ -1243,7 +1273,7 @@ Certain features are not yet implemented (no current personal business need), th
 =head1 BUGS
 
 Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle>.  I will be notified, and then you'll
+the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle>. I will be notified, and then you'll
 automatically be notified of progress on your bug as I make changes.
 
 You may also add to the code via github, at L<http://github.com/Jayceh/Business--OnlinePayment--Litle.git>
@@ -1305,5 +1335,4 @@ perl(1). L<Business::OnlinePayment>
 
 =cut
 
-1;    # End of Business::OnlinePayment::Litle
-
+1; # End of Business::OnlinePayment::Litle
