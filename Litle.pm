@@ -228,26 +228,26 @@ Default: Live
 sub test_transaction {
     my $self = shift;
     my $testMode = shift;
-    if (! defined $testMode) { $testMode = $$self{'test_transaction'} || 0; }
+    if (! defined $testMode) { $testMode = $self->{'test_transaction'} || 0; }
 
     if (lc($testMode) eq 'sandbox') {
-	$$self{'test_transaction'} = 'sandbox';
+	$self->{'test_transaction'} = 'sandbox';
         $self->server('www.testlitle.com');
         $self->port('443');
         $self->path('/sandbox/communicator/online');
     } elsif ($testMode) {
-	$$self{'test_transaction'} = $testMode;
+	$self->{'test_transaction'} = $testMode;
         $self->server('cert.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
     } else {
-	$$self{'test_transaction'} = 0;
+	$self->{'test_transaction'} = 0;
         $self->server('payments.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
     }
 
-    return $$self{'test_transaction'};
+    return $self->{'test_transaction'};
 }
 
 =head2 map_fields
