@@ -1238,7 +1238,6 @@ Certain features are not yet implemented (no current personal business need), th
     Capture Given Auth
     3DS
     billMeLater
-    Credit against non-litle transaction
 
 =head1 BUGS
 
