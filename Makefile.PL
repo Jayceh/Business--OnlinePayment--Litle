@@ -22,6 +22,7 @@ WriteMakefile(
         'Net::SSLeay'          => 0,
         'Net::SFTP::Foreign'   => '1.57',
         'IO::String'           => 0,
+        'HTTP::Tiny'           => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'Business-OnlinePayment-Litle-*' },
