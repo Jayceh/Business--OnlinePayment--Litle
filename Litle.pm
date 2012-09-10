@@ -199,13 +199,14 @@ sub set_defaults {
 
     $self->build_subs(
         qw( order_number md5 avs_code cvv2_response
-          cavv_response api_version xmlns failure_status batch_api_version
+          cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence
           )
     );
 
     $self->api_version('8.1')                   unless $self->api_version;
     $self->batch_api_version('8.1')             unless $self->batch_api_version;
+    $self->chargeback_api_version('2.2')             unless $self->batch_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
 
@@ -1220,10 +1221,122 @@ sub _xmlwrite {
     }
     else {
         $writer->startTag($item);
-	utf8::decode($value); # prevent double byte corruption in the xml output
+        utf8::decode($value); # prevent double byte corruption in the xml output
         $writer->characters($value);
         $writer->endTag($item);
     }
+}
+
+#------------------------------------ Chargebacks
+
+sub chargeback_activity_request {
+    my ( $self, $args ) = @_;
+    my $post_data;
+
+    $self->is_success(0);
+    ## activity_date
+    ## Type = Date; Format = YYYY-MM-DD
+    if ( $args->{'activity_date'} !~ m/^{\d,4}-{\d,2}-{\d,2}$/ ) {
+        die "Invalid Date Pattern, YYYY-MM-DD required:"
+          . $args->{'activity_date'};
+    }
+    #
+    ## financials only [true,false]
+    # The financialOnly element is an optional child of the litleChargebackActivitiesRequest element.
+    # You use this flag in combination with the activityDate element to specify a request for chargeback financial activities that occurred on the specified date.
+    # A value of true returns only activities that had financial impact on the specified date.
+    # A value of false returns all activities on the specified date.
+    #Type = Boolean; Valid Values = true or false
+    my $financials;
+    if ( defined( $args->{'financial_only'} ) ) {
+        $financials = $args->{'financial_only'} ? 'true' : 'false';
+
+    }
+    else {
+        $financials = 'false';
+    }
+
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf-8',
+    );
+    ## set the authentication data
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        content  => $args,
+        user     => 'login',
+        password => 'password',
+      );
+
+    ## Start the XML Document, parent tag
+    $writer->xmlDecl();
+    $writer->startTag(
+        "litleChargebackActivitiesRequest",
+        version => $self->chargeback_api_version,
+        xmlns   => $self->xmlns,
+    );
+
+    ## authentication
+    $self->_xmlwrite( $writer, 'authentication', \%authentication );
+    ## batch Request tag
+    $writer->startTag('activityDate');
+      $writer->characters( $args->{'activity_date'} );
+    $writer->endTag('activityDate');
+    $writer->startTag('financialOnly');
+      $writer->characters($financials);
+    $writer->endTag('financialOnly');
+    $writer->endTag("litleChargebackActivitiesRequest");
+    $writer->end();
+    ## END XML Generation
+
+    $self->{'_post_data'} = $post_data;
+    warn $self->{'_post_data'} if $DEBUG;
+    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+
+    warn Dumper $page, $server_response, \%headers if $DEBUG;
+
+    my $response = {};
+    if ( $server_response =~ /^200/ ) {
+        ## Failed to parse
+        if ( !eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@, $page";
+        }    ## well-formed failure message
+        elsif ( exists( $response->{'response'} )
+            && $response->{'response'} == 1 )
+        {
+            ## parse error type error
+            warn Dumper( $response, $self->{'_post_data'} );
+            $self->error_message( $response->{'message'} );
+            return;
+        }    ## success message
+        else {
+            $self->error_message(
+                $response->{'litleChargebackActivitiesResponse'}->{'message'} );
+        }
+    }
+    else {
+        $server_response =~ s/[\r\n\s]+$//
+          ;    # remove newline so you can see the error in a linux console
+        if ( $server_response =~ /^900/ ) {
+            $server_response .= ' - verify Litle has whitelisted your IP';
+        }
+        die "CONNECTION FAILURE: $server_response";
+    }
+    $self->{_response} = $response;
+    my $resp = $response->{'litleChargebackActivitiesResponse'};
+
+    my @response;
+    require Business::OnlinePayment::Litle::ChargebackActivityResponse;
+    foreach my $case ( @{ $resp->{caseActivity} } ) {
+        push @response,
+          Business::OnlinePayment::litle::ChargebackActivityResponse->new(
+            $case);
+    }
+
+    warn Dumper($response) if $DEBUG;
+    return \@response;
 }
 
 =head1 AUTHOR
@@ -1286,7 +1399,7 @@ Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it al
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009 Jason Hall.
+Copyright 2012 Jason Hall.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
