@@ -1344,6 +1344,7 @@ sub chargeback_activity_request {
         else {
             $self->error_message(
                 $response->{'litleChargebackActivitiesResponse'}->{'message'} );
+            $self->is_success(1);
         }
     }
     else {
@@ -1361,12 +1362,105 @@ sub chargeback_activity_request {
     require Business::OnlinePayment::Litle::ChargebackActivityResponse;
     foreach my $case ( @{ $resp->{caseActivity} } ) {
         push @response,
-          Business::OnlinePayment::litle::ChargebackActivityResponse->new(
-            $case);
+          Business::OnlinePayment::litle::ChargebackActivityResponse->new($case);
     }
 
     warn Dumper($response) if $DEBUG;
     return \@response;
+}
+
+sub chargeback_update_request {
+    my ( $self, $args ) = @_;
+    my $post_data;
+
+    $self->is_success(0);
+
+    foreach my $key (qw(case_id merchant_activity_id activity )) {
+        ## case_id
+        ## merchant_activity_id
+        ## activity
+      die "Missing arg $key" unless $args->{$key};
+    }
+   
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf-8',
+    );
+    ## set the authentication data
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        content  => $args,
+        user     => 'login',
+        password => 'password',
+      );
+
+    ## Start the XML Document, parent tag
+    $writer->xmlDecl();
+    $writer->startTag(
+        "litleChargebackUpdateRequest",
+        version => $self->chargeback_api_version,
+        xmlns   => $self->xmlns,
+    );
+
+    ## authentication
+      $self->_xmlwrite( $writer, 'authentication', \%authentication );
+      $writer->startTag('caseUpdate');
+        $writer->startTag('caseId');
+          $writer->characters( $args->{'case_id'} );
+        $writer->endTag('caseId');
+
+        $writer->startTag('merchantActivityId');
+          $writer->characters( $args->{'merchant_activity_id'} );
+        $writer->endTag('merchantActivityId');
+
+        $writer->startTag('activity');
+          $writer->characters( $args->{'activity'} );
+        $writer->endTag('activity');
+        
+      $writer->endTag('caseUpdate');
+    $writer->endTag("litleChargebackUpdateRequest");
+    $writer->end();
+    ## END XML Generation
+
+    $self->{'_post_data'} = $post_data;
+    warn $self->{'_post_data'} if $DEBUG;
+    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+
+    warn Dumper $page, $server_response, \%headers if $DEBUG;
+
+    my $response = {};
+    if ( $server_response =~ /^200/ ) {
+        ## Failed to parse
+        if ( !eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@, $page";
+        }    ## well-formed failure message
+        elsif ( exists( $response->{'response'} )
+            && $response->{'response'} == 1 )
+        {
+            ## parse error type error
+            warn Dumper( $response, $self->{'_post_data'} );
+            $self->error_message( $response->{'message'} );
+            return;
+        }    ## success message
+        else {
+            $self->error_message(
+                $response->{'litleChargebackUpdateResponse'}->{'message'} );
+            $self->is_success(1);
+        }
+    }
+    else {
+        $server_response =~ s/[\r\n\s]+$//
+          ;    # remove newline so you can see the error in a linux console
+        if ( $server_response =~ /^900/ ) {
+            $server_response .= ' - verify Litle has whitelisted your IP';
+        }
+        die "CONNECTION FAILURE: $server_response";
+    }
+    $self->{_response} = $response;
+    my $resp = $response->{'litleChargebackUpdateResponse'};
+    return $resp->{'caseUpdateResponse'};
 }
 
 =head1 AUTHOR
