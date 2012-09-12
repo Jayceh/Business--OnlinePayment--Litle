@@ -7,6 +7,8 @@ use Business::OnlinePayment;
 use Business::OnlinePayment::HTTPS;
 use Business::OnlinePayment::Litle::ErrorCodes '%ERRORS';
 use vars qw(@ISA $me $DEBUG $VERSION);
+use MIME::Base64;
+use HTTP::Tiny;
 use XML::Writer;
 use XML::Simple;
 use Tie::IxHash;
@@ -135,7 +137,7 @@ Part of the enhanced data for level III Interchange rates
 
 =head1 SPECS
 
-Currently uses the Litle XML specifications version 8.12
+Currently uses the Litle XML specifications version 8.12 and chargeback version 2.2
 
 =head1 TESTING
 
@@ -179,6 +181,14 @@ sub set_defaults {
     my $self = shift;
     my %opts = @_;
 
+    $self->build_subs(
+        qw( order_number md5 avs_code cvv2_response
+          cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
+          is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
+          verify_SSL
+          )
+    );
+
     $self->test_transaction(0);
 
     if ( $opts{debug} ) {
@@ -194,15 +204,9 @@ sub set_defaults {
         delete $opts{$key};
     }
 
-    $self->build_subs(
-        qw( order_number md5 avs_code cvv2_response
-          cavv_response api_version xmlns failure_status batch_api_version
-          is_prepaid prepaid_balance get_affluence
-          )
-    );
-
     $self->api_version('8.1')                   unless $self->api_version;
     $self->batch_api_version('8.1')             unless $self->batch_api_version;
+    $self->chargeback_api_version('2.2')        unless $self->chargeback_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
 
@@ -232,19 +236,50 @@ sub test_transaction {
 
     if (lc($testMode) eq 'sandbox') {
 	$self->{'test_transaction'} = 'sandbox';
+        $self->verify_SSL(0);
+
         $self->server('www.testlitle.com');
         $self->port('443');
         $self->path('/sandbox/communicator/online');
+
+        $self->chargeback_server('services.cert.litle.com'); # no sandbox exists, so fallback to certify
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
+    } elsif (lc($testMode) eq 'localhost') {
+        # this allows the user to create a local web server to do generic testing with
+	$self->{'test_transaction'} = 'localhost';
+        $self->verify_SSL(0);
+
+        $self->server('localhost');
+        $self->port('443');
+        $self->path('/sandbox/communicator/online');
+
+        $self->chargeback_server('localhost');
+        $self->chargeback_server('www.eci-cart.net');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
 	$self->{'test_transaction'} = $testMode;
+        $self->verify_SSL(0);
+
         $self->server('cert.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
+
+        $self->chargeback_server('services.cert.litle.com');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
 	$self->{'test_transaction'} = 0;
+        $self->verify_SSL(1);
+
         $self->server('payments.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
+
+        $self->chargeback_server('services.litle.com');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     }
 
     return $self->{'test_transaction'};
@@ -343,8 +378,8 @@ Used internally to guarentee that XML data will conform to the Litle spec.
     0 - ignore undefined values
     1 - error if the value is not defined
 
-$tx->format_misc_field( \%content, [field, maxLen, minLen, errorOnLength, isRequired] );
-$tx->format_misc_field( \%content, ['amount',   0,     12,             0,          0] );
+ $tx->format_misc_field( \%content, [field, maxLen, minLen, errorOnLength, isRequired] );
+ $tx->format_misc_field( \%content, ['amount',   0,     12,             0,          0] );
 
 =cut
 
@@ -782,28 +817,16 @@ sub submit {
 
     warn Dumper $page, $server_response, \%headers if $DEBUG;
 
-    my $response = {};
-    if ( $server_response =~ /^200/ ) {
-        if ( ! eval { $response = XMLin($page); } ) {
-            die "XML PARSING FAILURE: $@";
-        }
-        elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
-        {
-            ## parse error type error
-            warn Dumper( $response, $self->{'_post_data'} );
-            $self->error_message( $response->{'message'} );
-            return;
-        }
-        else {
-            $self->error_message(
-                $response->{ $content{'TransactionType'} . 'Response' }
-                  ->{'message'} );
-        }
-    }
-    else {
-        $server_response =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
-        if ( $server_response =~ /^900/ ) { $server_response .= ' - verify Litle has whitelisted your IP'; }
-        die "CONNECTION FAILURE: $server_response";
+    my $response = $self->parse_xml_response( $page, $server_response );
+    if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
+        ## parse error type error
+        warn Dumper( $response, $self->{'_post_data'} );
+        $self->error_message( $response->{'message'} );
+        return;
+    } else {
+        $self->error_message(
+            $response->{ $content{'TransactionType'} . 'Response' }
+              ->{'message'} );
     }
     $self->{_response} = $response;
 
@@ -863,6 +886,224 @@ sub submit {
 
 }
 
+=head2 chargeback_retrieve_support_doc
+
+Retrieve a currently uploaded file
+
+ $tx->content(
+  login       => 'testdrive',
+  password    => '123qwe',
+  mercahntid  => '123456',
+  case_id     => '001',
+  filename    => 'mydoc.pdf',
+ );
+ $tx->chargeback_retrieve_support_doc();
+ $myFileData = $tx->{'fileContent'};
+
+=cut
+
+sub chargeback_retrieve_support_doc {
+    my ( $self ) = @_;
+    $self->litle_support_doc('RETRIEVE');
+    if ($self->is_success) { $self->{'fileContent'} = $self->{'_response'}; } else { $self->{'fileContent'} = undef; }
+}
+
+=head2 chargeback_delete_support_doc
+
+Delete a currently uploaded file.  Follows the same format as chargeback_retrieve_support_doc
+
+=cut
+
+sub chargeback_delete_support_doc {
+    my ( $self ) = @_;
+    $self->litle_support_doc('DELETE' );
+}
+
+=head2 chargeback_upload_support_doc
+
+Upload a new file
+
+ $tx->content(
+  login       => 'testdrive',
+  password    => '123qwe',
+  mercahntid  => '123456',
+  case_id     => '001',
+  filename    => 'mydoc.pdf',
+  filecontent => $binaryPdfData,
+  mimetype    => 'applicatoin/pdf',
+ );
+ $tx->chargeback_upload_support_doc();
+
+=cut
+
+sub chargeback_upload_support_doc {
+    my ( $self ) = @_;
+    $self->litle_support_doc('UPLOAD' );
+}
+
+=head2 chargeback_replace_support_doc
+
+Replace a previously uploaded file.  Follows the same format as chargeback_upload_support_doc
+
+=cut
+
+sub chargeback_replace_support_doc {
+    my ( $self ) = @_;
+    $self->litle_support_doc('REPLACE' );
+}
+
+sub litle_support_doc {
+    my ( $self, $action ) = @_;
+
+    $self->is_success(0);
+    my %content = $self->content();
+
+    my $requiredargs = ['case_id','filename'];
+    if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
+    foreach my $key (@$requiredargs) {
+        die "Missing arg $key" unless $content{$key};
+    }
+
+    my $actionRESTful = {
+        'DELETE' => 'DELETE',
+        'RETRIEVE' => 'GET',
+        'UPLOAD' => 'POST',
+        'REPLACE' => 'PUT',
+    };
+    die "UNDEFINED ACTION: $action" unless defined $actionRESTful->{$action};
+
+    {
+      use bytes;
+      if ( defined $content{'filecontent'} ) {
+          if ( length($content{'filecontent'}) > 2097152 ) { # file limit of 2M
+              croak "Files must be smaller then 2M in size.";
+          }
+          my $allowedTypes = {
+              'application/pdf' => 1,
+              'image/gif' => 1,
+              'image/jpeg' => 1,
+              'image/png' => 1,
+              'image/tiff' => 1,
+          };
+	  if ( ! defined $allowedTypes->{$content{'mimetype'}||''} ) {
+              croak "File must be one of PDF/GIF/JPG/PNG/TIFF".$content{'mimetype'};
+          }
+      }
+    }
+
+    my $caseidURI = $content{'case_id'};
+    my $filenameURI = $content{'filename'};
+    my $merchantidURI = $content{'merchantid'};
+    foreach ( $caseidURI, $filenameURI, $merchantidURI ) {
+        s/([^a-z0-9\.\-])/sprintf('%%%X',ord($1))/ige;
+    }
+
+    my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'//services/chargebacks/documents/'.$merchantidURI.'/'.$caseidURI.'/'.$filenameURI;
+    my $response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request($actionRESTful->{$action}, $url, {
+        headers => {
+            'Authorization' => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",''),
+            'Content-Type' => $content{'mimetype'} || 'text/plain',
+        },
+        content => $content{'filecontent'},
+    } );
+
+    $self->{_response} = $response->{'content'};
+    $self->{_response_code} = $response->{'status'};
+
+    if ( $action eq 'RETRIEVE' && $response->{'status'} =~ /^200/ && substr($response->{'content'},0,500) !~ /<Merchant/x) {
+        # the RETRIEVE action returns the actual page as the file, rather then returning XML
+        $self->is_success(1);
+    } else {
+        my $xml_response = $self->parse_xml_response( $response->{'content'}, $response->{'status'} );
+
+        if (defined $xml_response && defined $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'}) {
+            $self->is_success( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} eq '000' ? 1 : 0 );
+            $self->error_message( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseMessage'} );
+        } else {
+            croak "UNRECOGNIZED RESULT: $self->{_response}";
+        }
+    }
+}
+
+=head2 list_support_docs
+
+Return a hashref that contains a list of files that already exist on the server.
+
+ $tx->content(
+  login       => 'testdrive',
+  password    => '123qwe',
+  mercahntid  => '123456',
+  case_id     => '001',
+ );
+ my $ret = $tx->chargeback_list_support_docs();
+
+Currently this returns in this format
+
+ $ret = {
+   'file1' => {},
+   'file2' => {},
+ };
+
+Litle does not currently send any file attributes.  However the hash is built for future expansion.
+
+=cut
+
+sub chargeback_list_support_docs {
+    my ( $self ) = @_;
+
+    $self->is_success(0);
+
+    my %content = $self->content();
+    die "Missing arg case_id" unless $content{'case_id'};
+    my $caseidURI = $content{'case_id'};
+    my $merchantidURI = $content{'merchantid'};
+    foreach ( $caseidURI, $merchantidURI ) {
+        s/([^a-z0-9\.\-])/sprintf('%%%X',ord($1))/ige;
+    }
+
+    my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'//services/chargebacks/documents/'.$merchantidURI.'/'.$caseidURI.'/';
+    my $response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('GET', $url, {
+		headers => { Authorization => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",'') },
+    } );
+
+    $self->{_response} = $response->{'content'};
+    my $xml_response = $self->parse_xml_response( $response->{'content'}, $response->{'status'} );
+
+    if (defined $xml_response && $xml_response->{'ChargebackCase'}{'ResponseCode'}) {
+        $self->result_code( $xml_response->{'ChargebackCase'}{'ResponseCode'} );
+        $self->error_message( $xml_response->{'ChargebackCase'}{'ResponseMessage'} );
+    } elsif (defined $xml_response && $xml_response->{'ChargebackCase'}{'DocumentEntry'}) {
+        $self->is_success(1);
+        $self->result_code( '000' );
+
+	my $ref = $xml_response->{'ChargebackCase'}{'DocumentEntry'};
+	if (defined $ref->{'id'} && ref $ref->{'id'} eq '') {
+		# XMLin does not parse the result properly for a single document.  This fixes the single document format to match the multi-doc format
+		$ref = { $ref->{'id'} => $ref };
+        }
+	return $ref;
+    } else {
+        croak "UNRECOGNIZED RESULT: $self->{_response}";
+    }
+    return {};
+}
+
+sub parse_xml_response {
+    my ( $self, $page, $server_response ) = @_;
+    my $response = {};
+    if ( $server_response =~ /^200/ ) {
+        if ( ! eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@";
+        }
+    }
+    else {
+        $server_response =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
+        if ( $server_response =~ /^(?:900|599)/ ) { $server_response .= ' - verify Litle has whitelisted your IP'; }
+        die "CONNECTION FAILURE: $server_response";
+    }
+    return $response;
+}
+
 sub parse_batch_response {
     my ( $self, $args ) = @_;
     my @results;
@@ -883,7 +1124,7 @@ sub parse_batch_response {
 
 A new method, not supported under BOP yet, but interface to adding multiple entries, so we can write and interface with batches
 
-$tx->add_item( \%content );
+ $tx->add_item( \%content );
 
 =cut
 
@@ -1250,15 +1491,233 @@ sub _xmlwrite {
     }
     else {
         $writer->startTag($item);
-	utf8::decode($value); # prevent double byte corruption in the xml output
+        utf8::decode($value); # prevent double byte corruption in the xml output
         $writer->characters($value);
         $writer->endTag($item);
     }
 }
 
-=head1 AUTHOR
+#------------------------------------ Chargebacks
+
+sub chargeback_activity_request {
+    my ( $self ) = @_;
+    my $post_data;
+
+    $self->is_success(0);
+    my %content = $self->content();
+    ## activity_date
+    ## Type = Date; Format = YYYY-MM-DD
+    if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{1,2})-(\d{1,2})$/ || $1 > 12 || $2 > 31) {
+        die "Invalid Date Pattern, YYYY-MM-DD required:"
+          . ( $content{'activity_date'} || 'undef');
+    }
+    #
+    ## financials only [true,false]
+    # The financialOnly element is an optional child of the litleChargebackActivitiesRequest element.
+    # You use this flag in combination with the activityDate element to specify a request for chargeback financial activities that occurred on the specified date.
+    # A value of true returns only activities that had financial impact on the specified date.
+    # A value of false returns all activities on the specified date.
+    #Type = Boolean; Valid Values = true or false
+    my $financials;
+    if ( defined( $content{'financial_only'} ) ) {
+        $financials = $content{'financial_only'} ? 'true' : 'false';
+
+    }
+    else {
+        $financials = 'false';
+    }
+
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf8',
+    );
+    ## set the authentication data
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        content  => \%content,
+        user     => 'login',
+        password => 'password',
+      );
+
+    ## Start the XML Document, parent tag
+    $writer->xmlDecl();
+    $writer->startTag(
+        "litleChargebackActivitiesRequest",
+        version => $self->chargeback_api_version,
+        xmlns   => $self->xmlns,
+    );
+
+    ## authentication
+    $self->_xmlwrite( $writer, 'authentication', \%authentication );
+    ## batch Request tag
+    $writer->startTag('activityDate');
+      $writer->characters( $content{'activity_date'} );
+    $writer->endTag('activityDate');
+    $writer->startTag('financialOnly');
+      $writer->characters($financials);
+    $writer->endTag('financialOnly');
+    $writer->endTag("litleChargebackActivitiesRequest");
+    $writer->end();
+    ## END XML Generation
+
+    $self->{'_post_data'} = $post_data;
+    warn $self->{'_post_data'} if $DEBUG;
+    #my ( $page, $server_response, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
+    my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
+    my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
+        headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
+        content => $post_data,
+    } );
+
+    my $page = $tiny_response->{'content'};
+    my $server_response = $tiny_response->{'status'};
+    my %headers = %{$tiny_response->{'headers'}};
+
+    warn Dumper $page, $server_response, \%headers if $DEBUG;
+
+    my $response = {};
+    if ( $server_response =~ /^200/ ) {
+        ## Failed to parse
+        if ( !eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@, $page";
+        }    ## well-formed failure message
+        elsif ( exists( $response->{'response'} )
+            && $response->{'response'} == 1 )
+        {
+            ## parse error type error
+            warn Dumper( $response, $self->{'_post_data'} );
+            $self->error_message( $response->{'message'} );
+            return;
+        }    ## success message
+        else {
+            $self->error_message(
+                $response->{'litleChargebackActivitiesResponse'}->{'message'} );
+            $self->is_success(1);
+        }
+    }
+    else {
+        $server_response =~ s/[\r\n\s]+$//
+          ;    # remove newline so you can see the error in a linux console
+        if ( $server_response =~ /^(?:900|599)/ ) {
+            $server_response .= ' - verify Litle has whitelisted your IP';
+        }
+        die "CONNECTION FAILURE: $server_response";
+    }
+    $self->{_response} = $response;
+
+    my @response_list;
+    require Business::OnlinePayment::Litle::ChargebackActivityResponse;
+    if (ref $response->{caseActivity} ne 'ARRAY') { $response->{caseActivity} = [$response->{caseActivity}]; } # make sure we are an array
+    foreach my $case ( @{ $response->{caseActivity} } ) {
+        push @response_list,
+          Business::OnlinePayment::Litle::ChargebackActivityResponse->new($case);
+    }
+
+    warn Dumper($response) if $DEBUG;
+    return \@response_list;
+}
+
+sub chargeback_update_request {
+    my ( $self, $args ) = @_;
+    my $post_data;
+
+    $self->is_success(0);
+
+    foreach my $key (qw(case_id merchant_activity_id activity )) {
+        ## case_id
+        ## merchant_activity_id
+        ## activity
+      die "Missing arg $key" unless $args->{$key};
+    }
+   
+    my $writer = new XML::Writer(
+        OUTPUT      => \$post_data,
+        DATA_MODE   => 1,
+        DATA_INDENT => 2,
+        ENCODING    => 'utf-8',
+    );
+    ## set the authentication data
+    tie my %authentication, 'Tie::IxHash',
+      $self->revmap_fields(
+        content  => $args,
+        user     => 'login',
+        password => 'password',
+      );
+
+    ## Start the XML Document, parent tag
+    $writer->xmlDecl();
+    $writer->startTag(
+        "litleChargebackUpdateRequest",
+        version => $self->chargeback_api_version,
+        xmlns   => $self->xmlns,
+    );
+
+    ## authentication
+      $self->_xmlwrite( $writer, 'authentication', \%authentication );
+      $writer->startTag('caseUpdate');
+        $writer->startTag('caseId');
+          $writer->characters( $args->{'case_id'} );
+        $writer->endTag('caseId');
+
+        $writer->startTag('merchantActivityId');
+          $writer->characters( $args->{'merchant_activity_id'} );
+        $writer->endTag('merchantActivityId');
+
+        $writer->startTag('activity');
+          $writer->characters( $args->{'activity'} );
+        $writer->endTag('activity');
+        
+      $writer->endTag('caseUpdate');
+    $writer->endTag("litleChargebackUpdateRequest");
+    $writer->end();
+    ## END XML Generation
+
+    $self->{'_post_data'} = $post_data;
+    warn $self->{'_post_data'} if $DEBUG;
+    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+
+    warn Dumper $page, $server_response, \%headers if $DEBUG;
+
+    my $response = {};
+    if ( $server_response =~ /^200/ ) {
+        ## Failed to parse
+        if ( !eval { $response = XMLin($page); } ) {
+            die "XML PARSING FAILURE: $@, $page";
+        }    ## well-formed failure message
+        elsif ( exists( $response->{'response'} )
+            && $response->{'response'} == 1 )
+        {
+            ## parse error type error
+            warn Dumper( $response, $self->{'_post_data'} );
+            $self->error_message( $response->{'message'} );
+            return;
+        }    ## success message
+        else {
+            $self->error_message(
+                $response->{'litleChargebackUpdateResponse'}->{'message'} );
+            $self->is_success(1);
+        }
+    }
+    else {
+        $server_response =~ s/[\r\n\s]+$//
+          ;    # remove newline so you can see the error in a linux console
+        if ( $server_response =~ /^900/ ) {
+            $server_response .= ' - verify Litle has whitelisted your IP';
+        }
+        die "CONNECTION FAILURE: $server_response";
+    }
+    $self->{_response} = $response;
+    my $resp = $response->{'litleChargebackUpdateResponse'};
+    return $resp->{'caseUpdateResponse'};
+}
+
+=head1 AUTHORS
 
 Jason Hall, C<< <jayce at lug-nut.com> >>
+
+Jason Terry
 
 =head1 UNIMPLEMENTED
 
@@ -1268,7 +1727,6 @@ Certain features are not yet implemented (no current personal business need), th
     Capture Given Auth
     3DS
     billMeLater
-    Credit against non-litle transaction
 
 =head1 BUGS
 
@@ -1317,7 +1775,7 @@ Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it al
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2009 Jason Hall.
+Copyright 2012 Jason Hall.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
