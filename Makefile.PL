@@ -22,6 +22,8 @@ WriteMakefile(
         'Net::SSLeay'          => 0,
         'Net::SFTP::Foreign'   => '1.57',
         'IO::String'           => 0,
+        'HTTP::Tiny'           => '0.022',
+        'IO::Socket::SSL'      => '1.56', # required by HTTP::Tiny for SSL to work
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean               => { FILES => 'Business-OnlinePayment-Litle-*' },
