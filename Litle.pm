@@ -255,7 +255,6 @@ sub test_transaction {
         $self->path('/sandbox/communicator/online');
 
         $self->chargeback_server('localhost');
-        $self->chargeback_server('www.eci-cart.net');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
