@@ -35,7 +35,7 @@ my %orig_content = (
 
 my $chargeback_activity;
 my $tx = Business::OnlinePayment->new("Litle", @opts);
-$tx->test_transaction('localhost');
+$tx->test_transaction(1);
 
 diag("HTTPS POST chargeback_activity_request");
 SKIP: {
@@ -44,7 +44,7 @@ SKIP: {
     print '-'x70;
     print "CHARGEBACK ACTIVITY TESTS\n";
     my %content = %orig_content;
-    $content{'activity_date'} = '2012-01-16';
+    $content{'activity_date'} = '2012-09-10';
     $tx->content(%content);
     $chargeback_activity = $tx->chargeback_activity_request();
     is( $tx->is_success, 1, "Chargeback activity request" );
@@ -58,6 +58,8 @@ SKIP: {
     is( scalar(@{$chargeback_activity}) == 4, 1, "Objectified all four test cases" );
 
     foreach my $resp ( @{ $chargeback_activity } ) {
+      use Data::Dumper;
+      diag Dumper($resp);
         my ($resp_validation) = grep { $merchantid == $resp->merchant_id && $_->{'id'} == $resp->case_id } @{ $data->{'activity_response'} };
         response_check(
             $resp,
@@ -165,27 +167,16 @@ SKIP: {
 #
 sub tx_check {
     my $tx = shift;
-<<<<<<< HEAD
-    my %o  = @_;
-
-    is( $tx->is_success,    $o{is_success},    "$o{desc}: " . tx_info($tx) );
-    is( $tx->result_code,   $o{result_code},   "result_code(): RESULT" );
-=======
     my %o = @_;
 
     is( $tx->is_success, $o{is_success}, "$o{desc}: " . tx_info($tx) );
     is( $tx->result_code, $o{result_code}, "result_code(): RESULT" );
->>>>>>> c3b7261fc814e22bf22af30a06ef9d2af4b660f4
     is( $tx->error_message, $o{error_message}, "error_message() / RESPMSG" );
     if( $o{authorization} ){
         is( $tx->authorization, $o{authorization}, "authorization() / AUTHCODE" );
     }
     if( $o{avs_code} ){
-<<<<<<< HEAD
-        is( $tx->avs_code,  $o{avs_code},  "avs_code() / AVSADDR and AVSZIP" );
-=======
         is( $tx->avs_code, $o{avs_code}, "avs_code() / AVSADDR and AVSZIP" );
->>>>>>> c3b7261fc814e22bf22af30a06ef9d2af4b660f4
     }
     if( $o{cvv2_response} ){
         is( $tx->cvv2_response, $o{cvv2_response}, "cvv2_response() / CVV2MATCH" );
@@ -196,17 +187,10 @@ sub tx_check {
 #
 sub response_check {
     my $tx = shift;
-<<<<<<< HEAD
-    my %o  = @_;
-
-    is( $tx->reason_code,   $o{reason_code},   "reason_code(): RESULT" );
-    is( $tx->reason_code_description,   $o{reason_code_description},   "reason_code_description(): RESULT" );
-=======
     my %o = @_;
 
     is( $tx->reason_code, $o{reason_code}, "reason_code(): RESULT" );
     is( $tx->reason_code_description, $o{reason_code_description}, "reason_code_description(): RESULT" );
->>>>>>> c3b7261fc814e22bf22af30a06ef9d2af4b660f4
     is( $tx->hash->{'chargebackType'}, $o{type}, "type() / RESPMSG" );
 }
 sub tx_info {
@@ -216,19 +200,11 @@ sub tx_info {
 
     return (
         join( "",
-<<<<<<< HEAD
-            "is_success(",     $tx->is_success,    ")",
-            " order_number(",  $tx->order_number,  ")",
-            " error_message(", $tx->error_message, ")",
-            " result_code(",   $tx->result_code,   ")",
-            " invoice_number(",   $tx->invoice_number ,   ")",
-=======
             "is_success(", $tx->is_success, ")",
             " order_number(", $tx->order_number, ")",
             " error_message(", $tx->error_message, ")",
             " result_code(", $tx->result_code, ")",
             " invoice_number(", $tx->invoice_number , ")",
->>>>>>> c3b7261fc814e22bf22af30a06ef9d2af4b660f4
         )
     );
 }
