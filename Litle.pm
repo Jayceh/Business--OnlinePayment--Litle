@@ -1017,6 +1017,7 @@ sub litle_support_doc {
 
         if (defined $xml_response && defined $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'}) {
             $self->is_success( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} eq '000' ? 1 : 0 );
+            $self->result_code( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} );
             $self->error_message( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseMessage'} );
         } else {
             croak "UNRECOGNIZED RESULT: $self->{_response}";
@@ -1607,7 +1608,9 @@ sub chargeback_activity_request {
 
     my @response_list;
     require Business::OnlinePayment::Litle::ChargebackActivityResponse;
-    if (ref $response->{caseActivity} ne 'ARRAY') { $response->{caseActivity} = [$response->{caseActivity}]; } # make sure we are an array
+    if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
+        $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
+    }
     foreach my $case ( @{ $response->{caseActivity} } ) {
         push @response_list,
           Business::OnlinePayment::Litle::ChargebackActivityResponse->new($case);
