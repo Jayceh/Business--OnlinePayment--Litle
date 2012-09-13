@@ -185,7 +185,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL
+          verify_SSL phoenixTxnId
           )
     );
 
@@ -1621,16 +1621,17 @@ sub chargeback_activity_request {
 }
 
 sub chargeback_update_request {
-    my ( $self, $args ) = @_;
+    my ( $self ) = @_;
     my $post_data;
 
     $self->is_success(0);
+    my %content = $self->content();
 
     foreach my $key (qw(case_id merchant_activity_id activity )) {
         ## case_id
         ## merchant_activity_id
         ## activity
-      die "Missing arg $key" unless $args->{$key};
+      die "Missing arg $key" unless $content{$key};
     }
    
     my $writer = new XML::Writer(
@@ -1642,7 +1643,7 @@ sub chargeback_update_request {
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
       $self->revmap_fields(
-        content  => $args,
+        content  => \%content,
         user     => 'login',
         password => 'password',
       );
@@ -1659,15 +1660,15 @@ sub chargeback_update_request {
       $self->_xmlwrite( $writer, 'authentication', \%authentication );
       $writer->startTag('caseUpdate');
         $writer->startTag('caseId');
-          $writer->characters( $args->{'case_id'} );
+          $writer->characters( $content{'case_id'} );
         $writer->endTag('caseId');
 
         $writer->startTag('merchantActivityId');
-          $writer->characters( $args->{'merchant_activity_id'} );
+          $writer->characters( $content{'merchant_activity_id'} );
         $writer->endTag('merchantActivityId');
 
         $writer->startTag('activity');
-          $writer->characters( $args->{'activity'} );
+          $writer->characters( $content{'activity'} );
         $writer->endTag('activity');
         
       $writer->endTag('caseUpdate');
@@ -1677,7 +1678,16 @@ sub chargeback_update_request {
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    #my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
+    my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
+        headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
+        content => $post_data,
+    } );
+
+    my $page = $tiny_response->{'content'};
+    my $server_response = $tiny_response->{'status'};
+    my %headers = %{$tiny_response->{'headers'}};
 
     warn Dumper $page, $server_response, \%headers if $DEBUG;
 
@@ -1687,31 +1697,28 @@ sub chargeback_update_request {
         if ( !eval { $response = XMLin($page); } ) {
             die "XML PARSING FAILURE: $@, $page";
         }    ## well-formed failure message
-        elsif ( exists( $response->{'response'} )
-            && $response->{'response'} == 1 )
-        {
+        $self->{_response} = $response;
+        if ( exists( $response->{'response'} ) ) {
             ## parse error type error
             warn Dumper( $response, $self->{'_post_data'} );
+            $self->result_code( $response->{'response'} ); # 0 - success, 1 invalid xml
             $self->error_message( $response->{'message'} );
-            return;
-        }    ## success message
-        else {
-            $self->error_message(
-                $response->{'litleChargebackUpdateResponse'}->{'message'} );
+            $self->phoenixTxnId( $response->{'caseUpdateResponse'}{'phoenixTxnId'} );
             $self->is_success(1);
+            return $response->{'caseUpdateResponse'}{'phoenixTxnId'};
+        }
+        else {
+	    die "UNKNOWN XML RESULT: $page";
         }
     }
     else {
         $server_response =~ s/[\r\n\s]+$//
           ;    # remove newline so you can see the error in a linux console
-        if ( $server_response =~ /^900/ ) {
+        if ( $server_response =~ /^(?:900|599)/ ) {
             $server_response .= ' - verify Litle has whitelisted your IP';
         }
         die "CONNECTION FAILURE: $server_response";
     }
-    $self->{_response} = $response;
-    my $resp = $response->{'litleChargebackUpdateResponse'};
-    return $resp->{'caseUpdateResponse'};
 }
 
 =head1 AUTHORS
