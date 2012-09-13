@@ -6,6 +6,7 @@ use Data::Dumper;
 my $login = $ENV{'BOP_USERNAME'} ? $ENV{'BOP_USERNAME'} : 'TESTMERCHANT';
 my $password = $ENV{'BOP_PASSWORD'} ? $ENV{'BOP_PASSWORD'} : 'TESTPASS';
 my $merchantid = $ENV{'BOP_MERCHANTID'} ? $ENV{'BOP_MERCHANTID'} : 'TESTMERCHANTID';
+my $date = $ENV{'BOP_ACTIVITYDATE'} ? $ENV{'BOP_MERCHANTID'} : '2012-09-12';
 
 my @opts = ('default_Origin' => 'RECURRING');
 
@@ -38,28 +39,26 @@ my $tx = Business::OnlinePayment->new("Litle", @opts);
 $tx->test_transaction(1);
 
 diag("HTTPS POST chargeback_activity_request");
+
 SKIP: {
-    skip "No Test Account setup",1 if ! $authed;
+    skip "No Test Account setup",17 if ! $authed;
     ### list test
     print '-'x70;
     print "CHARGEBACK ACTIVITY TESTS\n";
     my %content = %orig_content;
-    $content{'activity_date'} = '2012-09-10';
+    $content{'activity_date'} = $date;
     $tx->content(%content);
     $chargeback_activity = $tx->chargeback_activity_request();
     is( $tx->is_success, 1, "Chargeback activity request" );
-}
-
-SKIP: {
-    skip "No Test Account setup",12 if ! $authed;
-### Litle Updater Tests
-    print '-'x70;
-    print "Update TESTS\n";
-    is( scalar(@{$chargeback_activity}) == 4, 1, "Objectified all four test cases" );
+    my $cnt = scalar(@{$chargeback_activity});
+    is( $cnt, 4, "Objectified all four test cases" );
+    if ( $tx->is_success && $cnt == 0 && ! defined $ENV{'BOP_ACTIVITYDATE'} ) {
+        diag('-'x70);
+        diag('$ENV{\'BOP_ACTIVITYDATE\'} not set, this probably caused your last test to fail.');
+        diag('-'x70);
+    }
 
     foreach my $resp ( @{ $chargeback_activity } ) {
-      use Data::Dumper;
-      diag Dumper($resp);
         my ($resp_validation) = grep { $merchantid == $resp->merchant_id && $_->{'id'} == $resp->case_id } @{ $data->{'activity_response'} };
         response_check(
             $resp,
@@ -69,7 +68,6 @@ SKIP: {
             type => $resp_validation->{'chargebackType'},
         );
     }
-
 }
 
 diag("HTTPS POST chargeback_list_support_docs");
@@ -85,12 +83,18 @@ foreach $filePTR ( @{ $data->{'test_images'} } ) {
     ok( length($filePTR->{'filecontent'}) > 1000, "Loaded from disk: ".$filePTR->{'filename'} );
 }
 
-my $chargeback_list;
+my $caseid = 0;
+my ($resp_validation) = grep { $_->{'currentQueue'} eq 'Merchant' } @{ $chargeback_activity };
+if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
+my $chargeback_list = {};
+
+diag("HTTPS POST chargeback_upload_support_doc");
+
 SKIP: {
-    skip "No Test Account setup",2 if ! $authed;
-    skip "No case found to list",2 if ! $chargeback_activity;
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
     my %content = %orig_content;
-    $content{'case_id'} = $chargeback_activity->[0]->case_id;
+    $content{'case_id'} = $caseid;
 
     foreach $filePTR ( @{ $data->{'test_images'} } ) {
         $content{'filename'} = $filePTR->{'filename'};
@@ -99,19 +103,30 @@ SKIP: {
         $tx->content(%content);
         $chargeback_list = $tx->chargeback_upload_support_doc();
         is( $tx->is_success, 1, "Chargeback upload: " . $content{'filename'} );
+        is( $tx->result_code, '000', "result_code(): RESULT" );
+        is( $tx->error_message, 'Success', "error_message(): RESULT" );
+        if ($tx->result_code eq '005') {
+            diag('-'x70);
+            diag('Result code 005 means that someone probably aborted the last test sequence early');
+            diag('-'x70);
+        }
     }
 }
 
+diag("HTTPS POST chargeback_list_support_doc");
+
 SKIP: {
-    skip "No Test Account setup",4 if ! $authed;
-    skip "No case found to list",4 if ! $chargeback_activity;
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
     my %content = %orig_content;
-    $content{'case_id'} = $chargeback_activity->[0]->case_id;
+    $content{'case_id'} = $caseid;
     $tx->content(%content);
     $chargeback_list = $tx->chargeback_list_support_docs();
     is( $tx->is_success, 1, "Chargeback list request" );
     my $cnt = scalar(keys %{$chargeback_list});
     is( $cnt >= 1, 1, "Chargeback list found $cnt files" );
+    is( $tx->result_code, '000', "result_code(): RESULT" );
+    is( $tx->error_message, 'Success', "error_message(): RESULT" );
 
     foreach my $filename ( keys %{ $chargeback_list } ) {
         my ($resp_validation) = grep { $_->{'filename'} eq $filename } @{ $data->{'list_response'} };
@@ -119,11 +134,13 @@ SKIP: {
     }
 }
 
+diag("HTTPS POST chargeback_replace_support_doc");
+
 SKIP: {
-    skip "No Test Account setup",2 if ! $authed;
-    skip "No case found to list",2 if ! $chargeback_activity;
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
     my %content = %orig_content;
-    $content{'case_id'} = $chargeback_activity->[0]->case_id;
+    $content{'case_id'} = $caseid;
 
     foreach $filePTR ( @{ $data->{'test_images'} } ) {
         $content{'filename'} = $filePTR->{'filename'};
@@ -132,34 +149,45 @@ SKIP: {
         $tx->content(%content);
         $chargeback_list = $tx->chargeback_replace_support_doc();
         is( $tx->is_success, 1, "Chargeback replace: " . $content{'filename'} );
+        is( $tx->result_code, '000', "result_code(): RESULT" );
+        is( $tx->error_message, 'Success', "error_message(): RESULT" );
     }
 }
 
+diag("HTTPS POST chargeback_retrieve_support_doc");
+
 SKIP: {
-    skip "No Test Account setup",2 if ! $authed;
-    skip "No case found to list",2 if ! $chargeback_activity;
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
     my %content = %orig_content;
-    $content{'case_id'} = $chargeback_activity->[0]->case_id;
+    $content{'case_id'} = $caseid;
 
     foreach $filePTR ( @{ $data->{'test_images'} } ) {
         $content{'filename'} = $filePTR->{'filename'};
         $tx->content(%content);
         $chargeback_list = $tx->chargeback_retrieve_support_doc();
         is( $tx->is_success, 1, "Chargeback retrieve: " . $content{'filename'} );
+        is( $tx->result_code, '000', "result_code(): RESULT" );
+        is( $tx->error_message, 'Success', "error_message(): RESULT" );
     }
 }
 
+diag("HTTPS POST chargeback_delete_support_doc");
+
 SKIP: {
-    skip "No Test Account setup",2 if ! $authed;
-    skip "No case found to list",2 if ! $chargeback_activity;
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
     my %content = %orig_content;
-    $content{'case_id'} = $chargeback_activity->[0]->case_id;
+    $content{'case_id'} = $caseid;
+    # Note the delete test must run, or it will make the next "upload" test sequence fail
 
     foreach $filePTR ( @{ $data->{'test_images'} } ) {
         $content{'filename'} = $filePTR->{'filename'};
         $tx->content(%content);
         $chargeback_list = $tx->chargeback_delete_support_doc();
         is( $tx->is_success, 1, "Chargeback delete: " . $content{'filename'} );
+        is( $tx->result_code, '000', "result_code(): RESULT" );
+        is( $tx->error_message, 'Success', "error_message(): RESULT" );
     }
 }
 
@@ -221,13 +249,10 @@ __DATA__
 $data= {
 'list_response' => [
     {
-        'filename' => 'invoice.tiff',
+        'filename' => 'testImage.jpg',
     },
     {
-        'filename' => 'invoice2.jpeg',
-    },
-    {
-        'filename' => 'invoice3.jpeg',
+        'filename' => 'testImage2.jpg',
     },
 ],
 'test_images' => [
@@ -242,29 +267,29 @@ $data= {
 ],
 'activity_response' => [
     {
-        id => '001',
+        id => '60700001',
         'chargebackType' => 'Deposit',
-        'reasonCodeDescription' => 'First Chargeback -- Test Transaction',
+        'reasonCodeDescription' => 'Contact Litle & Co for Definition',
         'reasonCode' => '00A1',
     },
 {
-    id => '002',
+    id => '60700002',
     'fromQueue' => 'Merchant',
     'chargebackType' => 'Deposit',
-    'reasonCodeDescription' => 'First Chargeback -- Test Transaction',
+    'reasonCodeDescription' => 'Contact Litle & Co for Definition',
     'reasonCode' => '00A1',
 },
   {
-    id => '003',
+    id => '60700003',
     'chargebackType' => 'Deposit',
-    'reasonCodeDescription' => 'First Chargeback -- Test Transaction',
+    'reasonCodeDescription' => 'Contact Litle & Co for Definition',
     'reasonCode' => '00A1',
   },
   {
-    id => '004',
+    id => '60700004',
     'fromQueue' => 'Merchant',
     'chargebackType' => 'Deposit',
-    'reasonCodeDescription' => 'First Chargeback -- Test Transaction',
+    'reasonCodeDescription' => 'Contact Litle & Co for Definition',
     'reasonCode' => '00A1',
   },
   ],
