@@ -6,7 +6,7 @@ use Data::Dumper;
 my $login = $ENV{'BOP_USERNAME'} ? $ENV{'BOP_USERNAME'} : 'TESTMERCHANT';
 my $password = $ENV{'BOP_PASSWORD'} ? $ENV{'BOP_PASSWORD'} : 'TESTPASS';
 my $merchantid = $ENV{'BOP_MERCHANTID'} ? $ENV{'BOP_MERCHANTID'} : 'TESTMERCHANTID';
-my $date = $ENV{'BOP_ACTIVITYDATE'} ? $ENV{'BOP_MERCHANTID'} : '2012-09-12';
+my $date = $ENV{'BOP_ACTIVITYDATE'} ? $ENV{'BOP_MERCHANTID'} : '2012-09-13';
 
 my @opts = ('default_Origin' => 'RECURRING');
 
@@ -38,8 +38,6 @@ my $chargeback_activity;
 my $tx = Business::OnlinePayment->new("Litle", @opts);
 $tx->test_transaction(1);
 
-diag("HTTPS POST chargeback_activity_request");
-
 SKIP: {
     skip "No Test Account setup",17 if ! $authed;
     ### list test
@@ -51,7 +49,7 @@ SKIP: {
     $chargeback_activity = $tx->chargeback_activity_request();
     is( $tx->is_success, 1, "Chargeback activity request" );
     my $cnt = scalar(@{$chargeback_activity});
-    is( $cnt, 4, "Objectified all four test cases" );
+    is( $cnt > 0, 1, "Objectified all test cases" );
     if ( $tx->is_success && $cnt == 0 && ! defined $ENV{'BOP_ACTIVITYDATE'} ) {
         diag('-'x70);
         diag('$ENV{\'BOP_ACTIVITYDATE\'} not set, this probably caused your last test to fail.');
@@ -70,7 +68,24 @@ SKIP: {
     }
 }
 
-diag("HTTPS POST chargeback_list_support_docs");
+SKIP: {
+    skip "No Test Account setup",4 if ! $authed;
+    my ($merchant_automated) = grep { $_->{'currentQueue'} eq 'Merchant Automated' } @{ $chargeback_activity };
+    is( defined $merchant_automated, 1, "Chargeback currentQueue = 'Merchant Automated' caseid found" );
+
+    skip "No caseid's have currentQueue = 'Merchant Automated'",3 if ! defined $merchant_automated;
+
+    my %content = %orig_content;
+    $content{'case_id'} = $merchant_automated->case_id;
+    $content{'merchant_activity_id'} = time();
+    $content{'activity'} = 'Assign To Merchant';
+
+    $tx->content(%content);
+    $tx->chargeback_update_request();
+    is( $tx->is_success, 1, "Chargeback caseid update: " . $content{'case_id'} );
+    is( $tx->result_code, '0', "result_code(): RESULT" );
+    is( $tx->error_message, 'Valid Format', "error_message(): RESULT" );
+}
 
 foreach $filePTR ( @{ $data->{'test_images'} } ) {
     open FILE, 't/resources/'.$filePTR->{'filename'} or die $!;
@@ -83,12 +98,14 @@ foreach $filePTR ( @{ $data->{'test_images'} } ) {
     ok( length($filePTR->{'filecontent'}) > 1000, "Loaded from disk: ".$filePTR->{'filename'} );
 }
 
-my $caseid = 0;
-my ($resp_validation) = grep { $_->{'currentQueue'} eq 'Merchant' } @{ $chargeback_activity };
-if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
 my $chargeback_list = {};
-
-diag("HTTPS POST chargeback_upload_support_doc");
+my $caseid = 0;
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    my ($resp_validation) = grep { $_->{'currentQueue'} eq 'Merchant' } @{ $chargeback_activity };
+    if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
+    is( $caseid > 0, 1, "Caseid found: " . $caseid );
+}
 
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
@@ -113,8 +130,6 @@ SKIP: {
     }
 }
 
-diag("HTTPS POST chargeback_list_support_doc");
-
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -134,8 +149,6 @@ SKIP: {
     }
 }
 
-diag("HTTPS POST chargeback_replace_support_doc");
-
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -154,8 +167,6 @@ SKIP: {
     }
 }
 
-diag("HTTPS POST chargeback_retrieve_support_doc");
-
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -171,8 +182,6 @@ SKIP: {
         is( $tx->error_message, 'Success', "error_message(): RESULT" );
     }
 }
-
-diag("HTTPS POST chargeback_delete_support_doc");
 
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
