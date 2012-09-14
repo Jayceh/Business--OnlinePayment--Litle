@@ -960,7 +960,7 @@ sub litle_support_doc {
     my $requiredargs = ['case_id','filename'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
     foreach my $key (@$requiredargs) {
-        die "Missing arg $key" unless $content{$key};
+        croak "Missing arg $key" unless $content{$key};
     }
 
     my $actionRESTful = {
@@ -975,7 +975,10 @@ sub litle_support_doc {
       use bytes;
       if ( defined $content{'filecontent'} ) {
           if ( length($content{'filecontent'}) > 2097152 ) { # file limit of 2M
-              croak "Files must be smaller then 2M in size.";
+              my $msg = 'Filesize Exceeds Limit Of 2MB';
+              $self->result_code( 012 );
+              $self->error_message( $msg );
+              croak $msg;
           }
           my $allowedTypes = {
               'application/pdf' => 1,
@@ -984,7 +987,7 @@ sub litle_support_doc {
               'image/png' => 1,
               'image/tiff' => 1,
           };
-	  if ( ! defined $allowedTypes->{$content{'mimetype'}||''} ) {
+          if ( ! defined $allowedTypes->{$content{'mimetype'}||''} ) {
               croak "File must be one of PDF/GIF/JPG/PNG/TIFF".$content{'mimetype'};
           }
       }
@@ -1054,7 +1057,7 @@ sub chargeback_list_support_docs {
     $self->is_success(0);
 
     my %content = $self->content();
-    die "Missing arg case_id" unless $content{'case_id'};
+    croak "Missing arg case_id" unless $content{'case_id'};
     my $caseidURI = $content{'case_id'};
     my $merchantidURI = $content{'merchantid'};
     foreach ( $caseidURI, $merchantidURI ) {
@@ -1631,7 +1634,7 @@ sub chargeback_update_request {
         ## case_id
         ## merchant_activity_id
         ## activity
-      die "Missing arg $key" unless $content{$key};
+      croak "Missing arg $key" unless $content{$key};
     }
    
     my $writer = new XML::Writer(
