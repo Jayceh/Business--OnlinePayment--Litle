@@ -1507,7 +1507,7 @@ sub chargeback_activity_request {
     my %content = $self->content();
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
-    if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{1,2})-(\d{1,2})$/ || $1 > 12 || $2 > 31) {
+    if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{2})-(\d{2})$/ || $1 > 12 || $2 > 31) {
         die "Invalid Date Pattern, YYYY-MM-DD required:"
           . ( $content{'activity_date'} || 'undef');
     }
