@@ -71,7 +71,7 @@ SKIP: {
 SKIP: {
     skip "No Test Account setup",4 if ! $authed;
     my ($merchant_automated) = grep { $_->{'currentQueue'} eq 'Merchant Automated' } @{ $chargeback_activity };
-    is( defined $merchant_automated, 1, "Chargeback currentQueue = 'Merchant Automated' caseid found" );
+    skip "No 'Merchant Automated' status found.",4 if ! defined $merchant_automated;
 
     skip "No caseid's have currentQueue = 'Merchant Automated'",3 if ! defined $merchant_automated;
 
@@ -87,7 +87,7 @@ SKIP: {
     is( $tx->error_message, 'Valid Format', "error_message(): RESULT" );
 }
 
-foreach $filePTR ( @{ $data->{'test_images'} } ) {
+foreach $filePTR ( @{ $data->{'test_images'} }, @{ $data->{'replace_images'} } ) {
     open FILE, 't/resources/'.$filePTR->{'filename'} or die $!;
     binmode FILE;
     my $buf;
@@ -95,18 +95,26 @@ foreach $filePTR ( @{ $data->{'test_images'} } ) {
         $filePTR->{'filecontent'} .= $buf;
     }
     close(FILE);
-    ok( length($filePTR->{'filecontent'}) > 1000, "Loaded from disk: ".$filePTR->{'filename'} );
+    ok( length($filePTR->{'filecontent'}) > 250, "Loaded from disk: ".$filePTR->{'filename'} );
 }
 
 my $chargeback_list = {};
 my $caseid = 0;
+
+# Litle says to use the following line... but it fails
+#$caseid = $merchantid . '001'; # Litle says use this for the test case #1
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     my ($resp_validation) = grep { $_->{'currentQueue'} eq 'Merchant' } @{ $chargeback_activity };
     if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
     is( $caseid > 0, 1, "Caseid found: " . $caseid );
 }
+diag "Test Case #1 ($caseid)";
 
+# Litle cleanup, make sure no files we are about to upload already exist
+clean_test($authed,$caseid,\%orig_content,$data,$tx);
+
+# Litle test 1 upload all documents
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -130,6 +138,7 @@ SKIP: {
     }
 }
 
+# Litle test 2, verify all documents by doing a list
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -139,7 +148,8 @@ SKIP: {
     $chargeback_list = $tx->chargeback_list_support_docs();
     is( $tx->is_success, 1, "Chargeback list request" );
     my $cnt = scalar(keys %{$chargeback_list});
-    is( $cnt >= 1, 1, "Chargeback list found $cnt files" );
+    my $needed = scalar(@{$data->{'test_images'}});
+    is( $cnt == $needed, 1, "Chargeback list found $cnt files, needed $needed" );
     is( $tx->result_code, '000', "result_code(): RESULT" );
     is( $tx->error_message, 'Success', "error_message(): RESULT" );
 
@@ -149,24 +159,7 @@ SKIP: {
     }
 }
 
-SKIP: {
-    skip "No Test Account setup",6 if ! $authed;
-    skip "No caseid found",6 if $caseid == 0;
-    my %content = %orig_content;
-    $content{'case_id'} = $caseid;
-
-    foreach $filePTR ( @{ $data->{'test_images'} } ) {
-        $content{'filename'} = $filePTR->{'filename'};
-        $content{'filecontent'} = $filePTR->{'filecontent'};
-        $content{'mimetype'} = $filePTR->{'mimetype'};
-        $tx->content(%content);
-        $chargeback_list = $tx->chargeback_replace_support_doc();
-        is( $tx->is_success, 1, "Chargeback replace: " . $content{'filename'} );
-        is( $tx->result_code, '000', "result_code(): RESULT" );
-        is( $tx->error_message, 'Success', "error_message(): RESULT" );
-    }
-}
-
+# Litle test 3, retrieve all documents
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -183,6 +176,46 @@ SKIP: {
     }
 }
 
+
+# Litle test 4, replace one document
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
+    my %content = %orig_content;
+    $content{'case_id'} = $caseid;
+
+    foreach $filePTR ( @{ $data->{'replace_images'} } ) {
+        $content{'filename'} = $filePTR->{'replace'};
+        $content{'filecontent'} = $filePTR->{'filecontent'};
+        $content{'mimetype'} = $filePTR->{'mimetype'};
+        $tx->content(%content);
+        $chargeback_list = $tx->chargeback_replace_support_doc();
+        is( $tx->is_success, 1, "Chargeback replace: " . $content{'filename'} );
+        is( $tx->result_code, '000', "result_code(): RESULT" );
+        is( $tx->error_message, 'Success', "error_message(): RESULT" );
+        last; # only need to replace one
+    }
+}
+
+# Litle test 5, retrieve the replaced document
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
+    my %content = %orig_content;
+    $content{'case_id'} = $caseid;
+
+    foreach $filePTR ( @{ $data->{'replace_images'} } ) {
+        $content{'filename'} = $filePTR->{'replace'};
+        $tx->content(%content);
+	my $data = $tx->{'fileContent'};
+        $chargeback_list = $tx->chargeback_retrieve_support_doc();
+        is( $tx->is_success, 1, "Chargeback retrieve: " . $content{'filename'} );
+        is( $tx->result_code, '000', "result_code(): RESULT" );
+        is( $tx->error_message, 'Success', "error_message(): RESULT" );
+    }
+}
+
+# Litle test 6, delete a document
 SKIP: {
     skip "No Test Account setup",6 if ! $authed;
     skip "No caseid found",6 if $caseid == 0;
@@ -190,15 +223,174 @@ SKIP: {
     $content{'case_id'} = $caseid;
     # Note the delete test must run, or it will make the next "upload" test sequence fail
 
-    foreach $filePTR ( @{ $data->{'test_images'} } ) {
-        $content{'filename'} = $filePTR->{'filename'};
-        $tx->content(%content);
-        $chargeback_list = $tx->chargeback_delete_support_doc();
-        is( $tx->is_success, 1, "Chargeback delete: " . $content{'filename'} );
-        is( $tx->result_code, '000', "result_code(): RESULT" );
-        is( $tx->error_message, 'Success', "error_message(): RESULT" );
+    $filePTR = $data->{'test_images'}[0];
+    $content{'filename'} = $filePTR->{'filename'};
+    $tx->content(%content);
+    $chargeback_list = $tx->chargeback_delete_support_doc();
+    is( $tx->is_success, 1, "Chargeback delete: " . $content{'filename'} );
+    is( $tx->result_code, '000', "result_code(): RESULT" );
+    is( $tx->error_message, 'Success', "error_message(): RESULT" );
+}
+
+# Litle test 7, verify successful deletion by doing a list
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
+    my %content = %orig_content;
+    $content{'case_id'} = $caseid;
+    $tx->content(%content);
+    $chargeback_list = $tx->chargeback_list_support_docs();
+    is( $tx->is_success, 1, "Chargeback list request" );
+    my $cnt = scalar(keys %{$chargeback_list});
+    my $needed = scalar(@{$data->{'test_images'}}) - 1;
+    is( $cnt == $needed, 1, "Chargeback list found $cnt files, needed $needed" );
+    is( $tx->result_code, '000', "result_code(): RESULT" );
+    is( $tx->error_message, 'Success', "error_message(): RESULT" );
+
+    foreach my $filename ( keys %{ $chargeback_list } ) {
+        my ($resp_validation) = grep { $_->{'filename'} eq $filename } @{ $data->{'list_response'} };
+        is ( $filename, $resp_validation->{'filename'}, "Chargeback list found filename: " . $filename );
     }
 }
+
+$caseid = 0;
+# Litle says to use the following line... but it fails
+#$caseid = $merchantid . '002'; # Litle says use this for the test case #1
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    my ($resp_validation) = grep { $_->{'currentQueue'} ne 'Merchant' } @{ $chargeback_activity };
+    if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
+    is( $caseid > 0, 1, "Caseid found: " . $caseid );
+}
+diag "Test Case #2 ($caseid)";
+
+# Litle cleanup, make sure no files we are about to upload already exist
+clean_test($authed,$caseid,\%orig_content,$data,$tx);
+
+# Litle Test case #2 parts 1 and 2
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
+    my %content = %orig_content;
+    $content{'case_id'} = $caseid;
+
+    foreach $filePTR ( @{ $data->{'test_images'} } ) {
+        $content{'filename'} = $filePTR->{'filename'};
+        $content{'filecontent'} = $filePTR->{'filecontent'};
+        $content{'mimetype'} = $filePTR->{'mimetype'};
+        $tx->content(%content);
+        $chargeback_list = $tx->chargeback_upload_support_doc();
+        is( $tx->is_success, 0, "Chargeback upload: " . $content{'filename'} );
+        is( $tx->result_code, '010', "result_code(): RESULT" );
+        is( $tx->error_message, 'Case not in valid cycle', "error_message(): RESULT" );
+	last; # only need to upload one
+    }
+}
+
+$caseid = 0;
+# Litle says to use the following line... but it fails
+#$caseid = $merchantid . '003'; # Litle says use this for the test case #1
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    my ($resp_validation) = grep { $_->{'currentQueue'} ne 'Merchant' } @{ $chargeback_activity };
+    if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
+    is( $caseid > 0, 1, "Caseid found: " . $caseid );
+}
+diag "Test Case #3 ($caseid)";
+
+# Litle cleanup, make sure no files we are about to upload already exist
+clean_test($authed,$caseid,\%orig_content,$data,$tx);
+
+# Litle Test case #3 parts 1 and 2
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
+    my %content = %orig_content;
+    $content{'case_id'} = $caseid;
+
+    $filePTR = $data->{'test_images'}[0];
+    $content{'filename'} = $filePTR->{'filename'};
+    $content{'filecontent'} = $filePTR->{'filecontent'};
+    $content{'mimetype'} = $filePTR->{'mimetype'};
+    $tx->content(%content);
+    $chargeback_list = $tx->chargeback_upload_support_doc();
+    is( $tx->is_success, 0, "Chargeback upload: " . $content{'filename'} );
+    is( $tx->result_code, '004', "result_code(): RESULT" );
+    is( $tx->error_message, 'Case Not In Merchant Queue', "error_message(): RESULT" );
+}
+
+$caseid = 0;
+# Litle says to use the following line... but it fails
+#$caseid = $merchantid . '004'; # Litle says use this for the test case #1
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    my ($resp_validation) = grep { $_->{'currentQueue'} eq 'Merchant' } @{ $chargeback_activity };
+    if (defined $resp_validation && $resp_validation->case_id) { $caseid = $resp_validation->case_id; }
+    is( $caseid > 0, 1, "Caseid found: " . $caseid );
+}
+diag "Test Case #4 ($caseid)";
+
+# Litle cleanup, make sure no files we are about to upload already exist
+clean_test($authed,$caseid,\%orig_content,$data,$tx);
+
+# Litle Test case #4 parts 1 and 2
+SKIP: {
+    skip "No Test Account setup",6 if ! $authed;
+    skip "No caseid found",6 if $caseid == 0;
+    my %content = %orig_content;
+    $content{'case_id'} = $caseid;
+
+    $filePTR = $data->{'test_images'}[0];
+    $content{'filename'} = 'maxsize.tif';
+    $content{'filecontent'} = $filePTR->{'filecontent'};
+    $content{'mimetype'} = $filePTR->{'mimetype'};
+    $tx->content(%content);
+    $chargeback_list = $tx->chargeback_upload_support_doc();
+    $chargeback_list = $tx->chargeback_upload_support_doc(); # run it twice because they don't have the file there already
+    is( $tx->is_success, 0, "Chargeback upload: " . $content{'filename'} );
+    is( $tx->result_code, '005', "result_code(): RESULT" );
+    is( $tx->error_message, 'Document Already Exists', "error_message(): RESULT" );
+
+    # Litel Test case 4 part 3 & 4
+    $content{'filename'} = $filePTR->{'filename'};
+    $content{'filecontent'} = $filePTR->{'filecontent'} . ' 'x3000000; # file greater then 2M
+    $content{'mimetype'} = $filePTR->{'mimetype'};
+    $tx->content(%content);
+    eval { $chargeback_list = $tx->chargeback_upload_support_doc(); };
+    is( $tx->is_success, 0, "Chargeback upload: " . $content{'filename'} );
+    is( $tx->error_message, 'Filesize Exceeds Limit Of 2MB', "error_message(): RESULT" );
+
+    # Litel Test case 4 part 5 & 6
+    $content{'filename'} = $filePTR->{'filename'};
+    $content{'filecontent'} = $filePTR->{'filecontent'};
+    $content{'mimetype'} = $filePTR->{'mimetype'};
+    foreach my $cnt ( 1 .. 10 ) {
+        $content{'filename'} = $cnt.$filePTR->{'filename'};
+    	$tx->content(%content);
+        $chargeback_list = $tx->chargeback_upload_support_doc(); # make sure we have to many files for this test
+    }
+    $content{'filename'} = '11'.$filePTR->{'filename'};
+    $tx->content(%content);
+    $tx->chargeback_upload_support_doc();
+    $chargeback_list = $tx->chargeback_list_support_docs();
+diag Dumper($chargeback_list);
+    is( $tx->is_success, 0, "Chargeback upload: " . $content{'filename'} );
+    is( $tx->result_code, '008', "result_code(): RESULT" );
+    is( $tx->error_message, 'Max Document Limit Per Case Reached', "error_message(): RESULT" );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #-----------------------------------------------------------------------------------
 #
@@ -254,6 +446,30 @@ sub expiration_date {
     return sprintf("%02d%02d", $month, $year);
 }
 
+sub clean_test {
+  my ($authed,$caseid,$orig_content,$data,$tx) = @_;
+  SKIP: {
+    skip "No Test Account setup",1 if ! $authed;
+    skip "No caseid found",1 if $caseid == 0;
+    my %content = %$orig_content;
+    $content{'case_id'} = $caseid;
+
+    foreach $filePTR ( @{ $data->{'test_images'} } ) {
+        $content{'filename'} = $filePTR->{'filename'};
+        $tx->content(%content);
+        $tx->chargeback_delete_support_doc();
+	# we don't really care if this worked... it's just preperation for the test sweet below
+    }
+
+    foreach my $cnt ( '', 1 .. 11 ) {
+        $content{'filename'} = $cnt.'maxsize.tif';
+        $tx->content(%content);
+        $tx->chargeback_delete_support_doc();
+    }
+    is( 1, 1, "Test files deleted, if they existed" );
+  }
+}
+
 __DATA__
 $data= {
 'list_response' => [
@@ -263,6 +479,25 @@ $data= {
     {
         'filename' => 'testImage2.jpg',
     },
+    {
+        'filename' => 'default.pdf',
+    },
+#    {
+#        'filename' => 'image1.gif',
+#    },
+    {
+        'filename' => 'person.png',
+    },
+    {
+        'filename' => 'zipper.tiff',
+    },
+],
+'replace_images' => [
+    {
+        'filename' => 'testImage2.jpg',
+        'replace'  => 'testImage.jpg',
+        'mimetype' => 'image/jpeg',
+    },
 ],
 'test_images' => [
     {
@@ -270,8 +505,20 @@ $data= {
         'mimetype' => 'image/jpeg',
     },
     {
-        'filename' => 'testImage2.jpg',
-        'mimetype' => 'image/jpeg',
+        'filename' => 'default.pdf',
+        'mimetype' => 'application/pdf',
+    },
+#    {
+#        'filename' => 'image1.gif',
+#        'mimetype' => 'image/gif',
+#    },
+    {
+        'filename' => 'person.png',
+        'mimetype' => 'image/png',
+    },
+    {
+        'filename' => 'zipper.tiff',
+        'mimetype' => 'image/tiff',
     },
 ],
 'activity_response' => [
