@@ -6,7 +6,7 @@ use Data::Dumper;
 my $login = $ENV{'BOP_USERNAME'} ? $ENV{'BOP_USERNAME'} : 'TESTMERCHANT';
 my $password = $ENV{'BOP_PASSWORD'} ? $ENV{'BOP_PASSWORD'} : 'TESTPASS';
 my $merchantid = $ENV{'BOP_MERCHANTID'} ? $ENV{'BOP_MERCHANTID'} : 'TESTMERCHANTID';
-my $date = $ENV{'BOP_ACTIVITYDATE'} ? $ENV{'BOP_MERCHANTID'} : '2012-09-13';
+my $date = $ENV{'BOP_ACTIVITYDATE'} ? $ENV{'BOP_ACTIVITYDATE'} : '2012-09-13';
 
 my @opts = ('default_Origin' => 'RECURRING');
 
