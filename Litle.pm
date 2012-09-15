@@ -185,7 +185,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL
+          verify_SSL phoenixTxnId
           )
     );
 
@@ -960,7 +960,7 @@ sub litle_support_doc {
     my $requiredargs = ['case_id','filename'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
     foreach my $key (@$requiredargs) {
-        die "Missing arg $key" unless $content{$key};
+        croak "Missing arg $key" unless $content{$key};
     }
 
     my $actionRESTful = {
@@ -975,7 +975,10 @@ sub litle_support_doc {
       use bytes;
       if ( defined $content{'filecontent'} ) {
           if ( length($content{'filecontent'}) > 2097152 ) { # file limit of 2M
-              croak "Files must be smaller then 2M in size.";
+              my $msg = 'Filesize Exceeds Limit Of 2MB';
+              $self->result_code( 012 );
+              $self->error_message( $msg );
+              croak $msg;
           }
           my $allowedTypes = {
               'application/pdf' => 1,
@@ -984,7 +987,7 @@ sub litle_support_doc {
               'image/png' => 1,
               'image/tiff' => 1,
           };
-	  if ( ! defined $allowedTypes->{$content{'mimetype'}||''} ) {
+          if ( ! defined $allowedTypes->{$content{'mimetype'}||''} ) {
               croak "File must be one of PDF/GIF/JPG/PNG/TIFF".$content{'mimetype'};
           }
       }
@@ -1017,6 +1020,7 @@ sub litle_support_doc {
 
         if (defined $xml_response && defined $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'}) {
             $self->is_success( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} eq '000' ? 1 : 0 );
+            $self->result_code( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} );
             $self->error_message( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseMessage'} );
         } else {
             croak "UNRECOGNIZED RESULT: $self->{_response}";
@@ -1053,7 +1057,7 @@ sub chargeback_list_support_docs {
     $self->is_success(0);
 
     my %content = $self->content();
-    die "Missing arg case_id" unless $content{'case_id'};
+    croak "Missing arg case_id" unless $content{'case_id'};
     my $caseidURI = $content{'case_id'};
     my $merchantidURI = $content{'merchantid'};
     foreach ( $caseidURI, $merchantidURI ) {
@@ -1506,7 +1510,7 @@ sub chargeback_activity_request {
     my %content = $self->content();
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
-    if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{1,2})-(\d{1,2})$/ || $1 > 12 || $2 > 31) {
+    if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{2})-(\d{2})$/ || $1 > 12 || $2 > 31) {
         die "Invalid Date Pattern, YYYY-MM-DD required:"
           . ( $content{'activity_date'} || 'undef');
     }
@@ -1607,7 +1611,9 @@ sub chargeback_activity_request {
 
     my @response_list;
     require Business::OnlinePayment::Litle::ChargebackActivityResponse;
-    if (ref $response->{caseActivity} ne 'ARRAY') { $response->{caseActivity} = [$response->{caseActivity}]; } # make sure we are an array
+    if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
+        $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
+    }
     foreach my $case ( @{ $response->{caseActivity} } ) {
         push @response_list,
           Business::OnlinePayment::Litle::ChargebackActivityResponse->new($case);
@@ -1618,16 +1624,17 @@ sub chargeback_activity_request {
 }
 
 sub chargeback_update_request {
-    my ( $self, $args ) = @_;
+    my ( $self ) = @_;
     my $post_data;
 
     $self->is_success(0);
+    my %content = $self->content();
 
     foreach my $key (qw(case_id merchant_activity_id activity )) {
         ## case_id
         ## merchant_activity_id
         ## activity
-      die "Missing arg $key" unless $args->{$key};
+      croak "Missing arg $key" unless $content{$key};
     }
    
     my $writer = new XML::Writer(
@@ -1639,7 +1646,7 @@ sub chargeback_update_request {
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
       $self->revmap_fields(
-        content  => $args,
+        content  => \%content,
         user     => 'login',
         password => 'password',
       );
@@ -1656,15 +1663,15 @@ sub chargeback_update_request {
       $self->_xmlwrite( $writer, 'authentication', \%authentication );
       $writer->startTag('caseUpdate');
         $writer->startTag('caseId');
-          $writer->characters( $args->{'case_id'} );
+          $writer->characters( $content{'case_id'} );
         $writer->endTag('caseId');
 
         $writer->startTag('merchantActivityId');
-          $writer->characters( $args->{'merchant_activity_id'} );
+          $writer->characters( $content{'merchant_activity_id'} );
         $writer->endTag('merchantActivityId');
 
         $writer->startTag('activity');
-          $writer->characters( $args->{'activity'} );
+          $writer->characters( $content{'activity'} );
         $writer->endTag('activity');
         
       $writer->endTag('caseUpdate');
@@ -1674,7 +1681,16 @@ sub chargeback_update_request {
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    #my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
+    my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
+        headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
+        content => $post_data,
+    } );
+
+    my $page = $tiny_response->{'content'};
+    my $server_response = $tiny_response->{'status'};
+    my %headers = %{$tiny_response->{'headers'}};
 
     warn Dumper $page, $server_response, \%headers if $DEBUG;
 
@@ -1684,31 +1700,28 @@ sub chargeback_update_request {
         if ( !eval { $response = XMLin($page); } ) {
             die "XML PARSING FAILURE: $@, $page";
         }    ## well-formed failure message
-        elsif ( exists( $response->{'response'} )
-            && $response->{'response'} == 1 )
-        {
+        $self->{_response} = $response;
+        if ( exists( $response->{'response'} ) ) {
             ## parse error type error
             warn Dumper( $response, $self->{'_post_data'} );
+            $self->result_code( $response->{'response'} ); # 0 - success, 1 invalid xml
             $self->error_message( $response->{'message'} );
-            return;
-        }    ## success message
-        else {
-            $self->error_message(
-                $response->{'litleChargebackUpdateResponse'}->{'message'} );
+            $self->phoenixTxnId( $response->{'caseUpdateResponse'}{'phoenixTxnId'} );
             $self->is_success(1);
+            return $response->{'caseUpdateResponse'}{'phoenixTxnId'};
+        }
+        else {
+	    die "UNKNOWN XML RESULT: $page";
         }
     }
     else {
         $server_response =~ s/[\r\n\s]+$//
           ;    # remove newline so you can see the error in a linux console
-        if ( $server_response =~ /^900/ ) {
+        if ( $server_response =~ /^(?:900|599)/ ) {
             $server_response .= ' - verify Litle has whitelisted your IP';
         }
         die "CONNECTION FAILURE: $server_response";
     }
-    $self->{_response} = $response;
-    my $resp = $response->{'litleChargebackUpdateResponse'};
-    return $resp->{'caseUpdateResponse'};
 }
 
 =head1 AUTHORS
