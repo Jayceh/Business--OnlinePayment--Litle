@@ -1730,7 +1730,6 @@ sub chargeback_update_request {
 }
 
 =head1 AUTHORS
->>>>>>> c3b7261fc814e22bf22af30a06ef9d2af4b660f4
 
 Jason Hall, C<< <jayce at lug-nut.com> >>
 
