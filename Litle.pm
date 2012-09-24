@@ -813,6 +813,7 @@ sub submit {
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
     my ( $page, $server_response, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
+    $self->server_response( $page );
 
     warn Dumper $page, $server_response, \%headers if $DEBUG;
 
@@ -1233,6 +1234,7 @@ sub create_batch {
         my ( $page, $server_response, %headers ) =
           $self->https_post($post_data);
         $self->{'_post_data'} = $post_data;
+        $self->server_response( $page );
         warn $self->{'_post_data'} if $DEBUG;
 
         warn Dumper [ $page, $server_response, \%headers ] if $DEBUG;
@@ -1334,6 +1336,7 @@ sub send_rfr {
     $self->port('15000');
     $self->path('/');
     my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    $self->server_response( $page );
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
 
@@ -1574,6 +1577,7 @@ sub chargeback_activity_request {
     } );
 
     my $page = $tiny_response->{'content'};
+    $self->server_response( $page );
     my $server_response = $tiny_response->{'status'};
     my %headers = %{$tiny_response->{'headers'}};
 
@@ -1689,6 +1693,7 @@ sub chargeback_update_request {
     } );
 
     my $page = $tiny_response->{'content'};
+    $self->server_response( $page );
     my $server_response = $tiny_response->{'status'};
     my %headers = %{$tiny_response->{'headers'}};
 
