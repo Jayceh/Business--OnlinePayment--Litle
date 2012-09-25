@@ -1217,11 +1217,9 @@ sub create_batch {
         $sftp->setcwd("inbound")
           or die "Cannot change working directory ", $sftp->error;
         ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
-        my $io = IO::String->new($post_data);
-        tie *IO, 'IO::String';
 
         my $filename = $opts{'batch_id'} || $opts{'login'} . "_" . time;
-        $sftp->put( $io, "$filename.prg" )
+        $sftp->put_content( $post_data, "$filename.prg" )
           or die "Cannot PUT $filename", $sftp->error;
         $sftp->rename( "$filename.prg",
             "$filename.asc" ) #once complete, you rename it, for pickup
