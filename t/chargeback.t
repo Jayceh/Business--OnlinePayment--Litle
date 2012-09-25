@@ -10,6 +10,9 @@ my $date = $ENV{'BOP_ACTIVITYDATE'} ? $ENV{'BOP_ACTIVITYDATE'} : '2012-09-13';
 
 my @opts = ('default_Origin' => 'RECURRING');
 
+my $basedir = $0;
+$basedir =~ s/[^\/]+$//;
+
 my $str = do { local $/ = undef; <DATA> };
 my $data;
 eval($str);
@@ -88,7 +91,7 @@ SKIP: {
 }
 
 foreach $filePTR ( @{ $data->{'test_images'} }, @{ $data->{'replace_images'} } ) {
-    open FILE, 't/resources/'.$filePTR->{'filename'} or die $!;
+    open FILE, $basedir.'resources/'.$filePTR->{'filename'} or die $!;
     binmode FILE;
     my $buf;
     while ( (read FILE, $buf, 4096) != 0) {
