@@ -16,6 +16,7 @@ use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 use IO::String;
 use Carp qw(croak);
+use Log::Scrubber qw($SCRUBBER scrubber :Carp);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
@@ -83,9 +84,13 @@ Returns the response error code.
 
 Returns the response error description text.
 
+=head2 server_request
+
+Returns the complete request that was sent to the server.  The request has been stripped of card_num, cvv2, and password.  So it should be safe to log.
+
 =head2 server_response
 
-Returns the complete response from the server.
+Returns the complete response from the server.  The response has been stripped of card_num, cvv2, and password.  So it should be safe to log.
 
 =head1 Handling of content(%content) data:
 
@@ -185,7 +190,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL phoenixTxnId
+          verify_SSL phoenixTxnId server_request server_response
           )
     );
 
@@ -235,7 +240,7 @@ sub test_transaction {
     if (! defined $testMode) { $testMode = $self->{'test_transaction'} || 0; }
 
     if (lc($testMode) eq 'sandbox') {
-	$self->{'test_transaction'} = 'sandbox';
+    $self->{'test_transaction'} = 'sandbox';
         $self->verify_SSL(0);
 
         $self->server('www.testlitle.com');
@@ -247,7 +252,7 @@ sub test_transaction {
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif (lc($testMode) eq 'localhost') {
         # this allows the user to create a local web server to do generic testing with
-	$self->{'test_transaction'} = 'localhost';
+    $self->{'test_transaction'} = 'localhost';
         $self->verify_SSL(0);
 
         $self->server('localhost');
@@ -258,7 +263,7 @@ sub test_transaction {
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
-	$self->{'test_transaction'} = $testMode;
+    $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
         $self->server('cert.litle.com');
@@ -269,7 +274,7 @@ sub test_transaction {
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
-	$self->{'test_transaction'} = 0;
+    $self->{'test_transaction'} = 0;
         $self->verify_SSL(1);
 
         $self->server('payments.litle.com');
@@ -290,6 +295,13 @@ sub test_transaction {
 
 sub map_fields {
     my ( $self, $content ) = @_;
+
+    local $SCRUBBER=1;
+    scrubber_init({
+        ($content->{'card_number'}||'')=>'DELETED',
+        ($content->{'cvv2'}||'')=>'DELETED',
+        ($content->{'password'}||'')=>'DELETED'},
+        );
 
     my $action  = lc( $content->{'action'} );
     my %actions = (
@@ -385,6 +397,13 @@ Used internally to guarentee that XML data will conform to the Litle spec.
 sub format_misc_field {
     my ($self, $content, $trunc) = @_;
 
+    local $SCRUBBER=1;
+    scrubber_init({
+        ($content->{'card_number'}||'')=>'DELETED',
+        ($content->{'cvv2'}||'')=>'DELETED',
+        ($content->{'password'}||'')=>'DELETED'},
+        );
+
     use bytes; # make sure we truncate on bytes, not characters
 
     if( defined $content->{ $trunc->[0] } ) {
@@ -448,6 +467,13 @@ sub format_phone_field {
 sub map_request {
     my ( $self, $content ) = @_;
 
+    local $SCRUBBER=1;
+    scrubber_init({
+        ($content->{'card_number'}||'')=>'DELETED',
+        ($content->{'cvv2'}||'')=>'DELETED',
+        ($content->{'password'}||'')=>'DELETED'},
+        );
+
     $self->map_fields($content);
 
     my $action = $content->{'TransactionType'};
@@ -461,7 +487,7 @@ sub map_request {
     foreach my $field ( 'amount', 'salesTax', 'discountAmount', 'shippingAmount', 'dutyAmount' ) {
         $self->format_amount_field($content, $field);
     }
-    
+
     # make sure the date is in MMYY format
     $content->{'expiration'} =~ s/^(\d{1,2})\D*\d*?(\d{2})$/$1$2/;
 
@@ -756,6 +782,14 @@ sub submit {
     $self->is_success(0);
 
     my %content = $self->content();
+
+    local $SCRUBBER=1;
+    scrubber_init({
+        ($content{'card_number'}||'')=>'DELETED',
+        ($content{'cvv2'}||'')=>'DELETED',
+        ($content{'password'}||'')=>'DELETED'},
+        );
+
     warn 'Pre processing: '.Dumper(\%content) if $DEBUG;
     my $req     = $self->map_request( \%content );
     warn 'Post processing: '.Dumper(\%content) if $DEBUG;
@@ -810,17 +844,18 @@ sub submit {
     $writer->end();
     ## END XML Generation
 
-    $self->{'_post_data'} = $post_data;
-    warn $self->{'_post_data'} if $DEBUG;
-    my ( $page, $server_response, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
-    $self->server_response( $page );
+    $self->server_request( scrubber $post_data );
+    warn $self->server_request if $DEBUG;
 
-    warn Dumper $page, $server_response, \%headers if $DEBUG;
+    my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
 
-    my $response = $self->parse_xml_response( $page, $server_response );
+    $self->server_response( scrubber $page );
+    warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
+
+    my $response = $self->parse_xml_response( $page, $status_code );
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
-        warn Dumper( $response, $self->{'_post_data'} );
+        warn Dumper $response, $self->server_request;
         $self->error_message( $response->{'message'} );
         return;
     } else {
@@ -876,11 +911,11 @@ sub submit {
 
     unless ( $self->is_success() ) {
         unless ( $self->error_message() ) {
-            $self->error_message( "(HTTPS response: $server_response) "
+            $self->error_message( "(HTTPS response: $status_code) "
                   . "(HTTPS headers: "
                   . join( ", ", map { "$_ => " . $headers{$_} } keys %headers )
                   . ") "
-                  . "(Raw HTTPS content: $page)" );
+                  . "(Raw HTTPS content: ".$self->server_response().")" );
         }
     }
 
@@ -958,6 +993,9 @@ sub litle_support_doc {
     $self->is_success(0);
     my %content = $self->content();
 
+    local $SCRUBBER=1;
+    scrubber_init({($content{'password'}||'')=>'DELETED'});
+
     my $requiredargs = ['case_id','filename'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
     foreach my $key (@$requiredargs) {
@@ -1010,8 +1048,8 @@ sub litle_support_doc {
         content => $content{'filecontent'},
     } );
 
-    $self->{_response} = $response->{'content'};
-    $self->{_response_code} = $response->{'status'};
+    $self->server_request( scrubber $content{'mimetype'} );
+    $self->server_response( scrubber $response->{'content'} );
 
     if ( $action eq 'RETRIEVE' && $response->{'status'} =~ /^200/ && substr($response->{'content'},0,500) !~ /<Merchant/x) {
         # the RETRIEVE action returns the actual page as the file, rather then returning XML
@@ -1024,7 +1062,7 @@ sub litle_support_doc {
             $self->result_code( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} );
             $self->error_message( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseMessage'} );
         } else {
-            croak "UNRECOGNIZED RESULT: $self->{_response}";
+            croak "UNRECOGNIZED RESULT: ".$self->server_response;
         }
     }
 }
@@ -1058,6 +1096,9 @@ sub chargeback_list_support_docs {
     $self->is_success(0);
 
     my %content = $self->content();
+    local $SCRUBBER=1;
+    scrubber_init({($content{'password'}||'')=>'DELETED'});
+
     croak "Missing arg case_id" unless $content{'case_id'};
     my $caseidURI = $content{'case_id'};
     my $merchantidURI = $content{'merchantid'};
@@ -1067,10 +1108,12 @@ sub chargeback_list_support_docs {
 
     my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'//services/chargebacks/documents/'.$merchantidURI.'/'.$caseidURI.'/';
     my $response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('GET', $url, {
-		headers => { Authorization => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",'') },
+        headers => { Authorization => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",'') },
     } );
 
-    $self->{_response} = $response->{'content'};
+    $self->server_request( scrubber $response->request->{'content'} );
+    $self->server_response( scrubber $response->{'content'} );
+
     my $xml_response = $self->parse_xml_response( $response->{'content'}, $response->{'status'} );
 
     if (defined $xml_response && $xml_response->{'ChargebackCase'}{'ResponseCode'}) {
@@ -1080,30 +1123,30 @@ sub chargeback_list_support_docs {
         $self->is_success(1);
         $self->result_code( '000' );
 
-	my $ref = $xml_response->{'ChargebackCase'}{'DocumentEntry'};
-	if (defined $ref->{'id'} && ref $ref->{'id'} eq '') {
-		# XMLin does not parse the result properly for a single document.  This fixes the single document format to match the multi-doc format
-		$ref = { $ref->{'id'} => $ref };
+    my $ref = $xml_response->{'ChargebackCase'}{'DocumentEntry'};
+    if (defined $ref->{'id'} && ref $ref->{'id'} eq '') {
+        # XMLin does not parse the result properly for a single document.  This fixes the single document format to match the multi-doc format
+        $ref = { $ref->{'id'} => $ref };
         }
-	return $ref;
+    return $ref;
     } else {
-        croak "UNRECOGNIZED RESULT: $self->{_response}";
+        croak "UNRECOGNIZED RESULT: ".$self->server_response;
     }
     return {};
 }
 
 sub parse_xml_response {
-    my ( $self, $page, $server_response ) = @_;
+    my ( $self, $page, $status_code ) = @_;
     my $response = {};
-    if ( $server_response =~ /^200/ ) {
+    if ( $status_code =~ /^200/ ) {
         if ( ! eval { $response = XMLin($page); } ) {
             die "XML PARSING FAILURE: $@";
         }
     }
     else {
-        $server_response =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
-        if ( $server_response =~ /^(?:900|599)/ ) { $server_response .= ' - verify Litle has whitelisted your IP'; }
-        die "CONNECTION FAILURE: $server_response";
+        $status_code =~ s/[\r\n\s]+$//; # remove newline so you can see the error in a linux console
+        if ( $status_code =~ /^(?:900|599)/ ) { $status_code .= ' - verify Litle has whitelisted your IP'; }
+        die "CONNECTION FAILURE: $status_code";
     }
     return $response;
 }
@@ -1142,6 +1185,9 @@ sub create_batch {
     my ( $self, %opts ) = @_;
 
     $self->is_success(0);
+
+    local $SCRUBBER=1;
+    scrubber_init({($opts{'password'}||'')=>'DELETED'});
 
     if ( scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
         $self->error('Cannot create an empty batch');
@@ -1231,16 +1277,16 @@ sub create_batch {
     elsif ( $opts{'method'} && $opts{'method'} eq 'https' ) {    #https post
         $self->port('15000');
         $self->path('/');
-        my ( $page, $server_response, %headers ) =
+        my ( $page, $status_code, %headers ) =
           $self->https_post($post_data);
-        $self->{'_post_data'} = $post_data;
-        $self->server_response( $page );
-        warn $self->{'_post_data'} if $DEBUG;
+        $self->server_request( scrubber $post_data );
+        $self->server_response( scrubber $page );
+        warn $self->server_request if $DEBUG;
 
-        warn Dumper [ $page, $server_response, \%headers ] if $DEBUG;
+        warn Dumper [ $page, $status_code, \%headers ] if $DEBUG;
 
         my $response = {};
-        if ( $server_response =~ /^200/ ) {
+        if ( $status_code =~ /^200/ ) {
             if ( ! eval { $response = XMLin($page); } ) {
                 die "XML PARSING FAILURE: $@";
             }
@@ -1248,7 +1294,7 @@ sub create_batch {
                 && $response->{'response'} == 1 )
             {
                 ## parse error type error
-                warn Dumper( $response, $self->{'_post_data'} );
+                warn Dumper( $response, $self->server_request );
                 $self->error_message( $response->{'message'} );
                 return;
             }
@@ -1258,7 +1304,7 @@ sub create_batch {
             }
         }
         else {
-            die "CONNECTION FAILURE: $server_response";
+            die "CONNECTION FAILURE: $status_code";
         }
         $self->{_response} = $response;
 
@@ -1272,7 +1318,7 @@ sub create_batch {
         unless ( $self->is_success() ) {
             unless ( $self->error_message() ) {
                 $self->error_message(
-                        "(HTTPS response: $server_response) "
+                        "(HTTPS response: $status_code) "
                       . "(HTTPS headers: "
                       . join( ", ",
                         map { "$_ => " . $headers{$_} } keys %headers )
@@ -1291,6 +1337,9 @@ sub create_batch {
 sub send_rfr {
     my ( $self, $args ) = @_;
     my $post_data;
+
+    local $SCRUBBER=1;
+    scrubber_init({($args->{'password'}||'')=>'DELETED'});
 
     $self->is_success(0);
     my $writer = new XML::Writer(
@@ -1335,22 +1384,23 @@ sub send_rfr {
     #
     $self->port('15000');
     $self->path('/');
-    my ( $page, $server_response, %headers ) = $self->https_post($post_data);
-    $self->server_response( $page );
-    $self->{'_post_data'} = $post_data;
-    warn $self->{'_post_data'} if $DEBUG;
+    my ( $page, $status_code, %headers ) = $self->https_post($post_data);
 
-    warn Dumper [ $page, $server_response, \%headers ] if $DEBUG;
+    $self->server_request( scrubber $post_data );
+    $self->server_response( scrubber $page );
+    warn $self->server_request if $DEBUG;
+
+    warn Dumper [ $page, $status_code, \%headers ] if $DEBUG;
 
     my $response = {};
-    if ( $server_response =~ /^200/ ) {
+    if ( $status_code =~ /^200/ ) {
         if ( ! eval { $response = XMLin($page); } ) {
             die "XML PARSING FAILURE: $@";
         }
         elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 )
         {
             ## parse error type error
-            warn Dumper( $response, $self->{'_post_data'} );
+            warn Dumper( $response, $self->server_request );
             $self->error_message( $response->{'message'} );
             return;
         }
@@ -1359,7 +1409,7 @@ sub send_rfr {
         }
     }
     else {
-        die "CONNECTION FAILURE: $server_response";
+        die "CONNECTION FAILURE: $status_code";
     }
     $self->{_response} = $response;
     if ( $response->{'RFRResponse'} ) {
@@ -1379,6 +1429,10 @@ sub send_rfr {
 
 sub retrieve_batch {
     my ( $self, %opts ) = @_;
+
+    local $SCRUBBER=1;
+    scrubber_init({($opts{'ftp_password'}||'')=>'DELETED'});
+
     croak "Missing filename" if !$opts{'batch_id'};
     my $post_data;
     if ( $opts{'batch_return'} ) {
@@ -1418,6 +1472,9 @@ sub retrieve_batch {
     else {
         $self->error_message( $response->{'batchResponse'}->{'message'} );
     }
+
+    $self->server_request( scrubber $post_data );
+    $self->server_response( scrubber $response );
 
     $self->{_response} = $response;
     my $resp = $response->{'batchResponse'};
@@ -1511,6 +1568,10 @@ sub chargeback_activity_request {
 
     $self->is_success(0);
     my %content = $self->content();
+
+    local $SCRUBBER=1;
+    scrubber_init({($content{'password'}||'')=>'DELETED'});
+
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
     if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{2})-(\d{2})$/ || $1 > 12 || $2 > 31) {
@@ -1569,7 +1630,7 @@ sub chargeback_activity_request {
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    #my ( $page, $server_response, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
+    #my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
     my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
     my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
         headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
@@ -1578,13 +1639,13 @@ sub chargeback_activity_request {
 
     my $page = $tiny_response->{'content'};
     $self->server_response( $page );
-    my $server_response = $tiny_response->{'status'};
+    my $status_code = $tiny_response->{'status'};
     my %headers = %{$tiny_response->{'headers'}};
 
-    warn Dumper $page, $server_response, \%headers if $DEBUG;
+    warn Dumper $page, $status_code, \%headers if $DEBUG;
 
     my $response = {};
-    if ( $server_response =~ /^200/ ) {
+    if ( $status_code =~ /^200/ ) {
         ## Failed to parse
         if ( !eval { $response = XMLin($page); } ) {
             die "XML PARSING FAILURE: $@, $page";
@@ -1604,12 +1665,12 @@ sub chargeback_activity_request {
         }
     }
     else {
-        $server_response =~ s/[\r\n\s]+$//
+        $status_code =~ s/[\r\n\s]+$//
           ;    # remove newline so you can see the error in a linux console
-        if ( $server_response =~ /^(?:900|599)/ ) {
-            $server_response .= ' - verify Litle has whitelisted your IP';
+        if ( $status_code =~ /^(?:900|599)/ ) {
+            $status_code .= ' - verify Litle has whitelisted your IP';
         }
-        die "CONNECTION FAILURE: $server_response";
+        die "CONNECTION FAILURE: $status_code";
     }
     $self->{_response} = $response;
 
@@ -1634,13 +1695,16 @@ sub chargeback_update_request {
     $self->is_success(0);
     my %content = $self->content();
 
+    local $SCRUBBER=1;
+    scrubber_init({($content{'password'}||'')=>'DELETED'});
+
     foreach my $key (qw(case_id merchant_activity_id activity )) {
         ## case_id
         ## merchant_activity_id
         ## activity
       croak "Missing arg $key" unless $content{$key};
     }
-   
+
     my $writer = new XML::Writer(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
@@ -1677,7 +1741,7 @@ sub chargeback_update_request {
         $writer->startTag('activity');
           $writer->characters( $content{'activity'} );
         $writer->endTag('activity');
-        
+
       $writer->endTag('caseUpdate');
     $writer->endTag("litleChargebackUpdateRequest");
     $writer->end();
@@ -1685,7 +1749,7 @@ sub chargeback_update_request {
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    #my ( $page, $server_response, %headers ) = $self->https_post($post_data);
+    #my ( $page, $status_code, %headers ) = $self->https_post($post_data);
     my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
     my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
         headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
@@ -1694,13 +1758,13 @@ sub chargeback_update_request {
 
     my $page = $tiny_response->{'content'};
     $self->server_response( $page );
-    my $server_response = $tiny_response->{'status'};
+    my $status_code = $tiny_response->{'status'};
     my %headers = %{$tiny_response->{'headers'}};
 
-    warn Dumper $page, $server_response, \%headers if $DEBUG;
+    warn Dumper $page, $status_code, \%headers if $DEBUG;
 
     my $response = {};
-    if ( $server_response =~ /^200/ ) {
+    if ( $status_code =~ /^200/ ) {
         ## Failed to parse
         if ( !eval { $response = XMLin($page); } ) {
             die "XML PARSING FAILURE: $@, $page";
@@ -1716,16 +1780,16 @@ sub chargeback_update_request {
             return $response->{'caseUpdateResponse'}{'phoenixTxnId'};
         }
         else {
-	    die "UNKNOWN XML RESULT: $page";
+        die "UNKNOWN XML RESULT: $page";
         }
     }
     else {
-        $server_response =~ s/[\r\n\s]+$//
+        $status_code =~ s/[\r\n\s]+$//
           ;    # remove newline so you can see the error in a linux console
-        if ( $server_response =~ /^(?:900|599)/ ) {
-            $server_response .= ' - verify Litle has whitelisted your IP';
+        if ( $status_code =~ /^(?:900|599)/ ) {
+            $status_code .= ' - verify Litle has whitelisted your IP';
         }
-        die "CONNECTION FAILURE: $server_response";
+        die "CONNECTION FAILURE: $status_code";
     }
 }
 
@@ -1739,7 +1803,7 @@ Jason Terry
 =head1 UNIMPLEMENTED
 
 Certain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
-   
+
     Force Capture
     Capture Given Auth
     3DS
