@@ -21,7 +21,7 @@ use Log::Scrubber qw($SCRUBBER scrubber :Carp);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.921';
+$VERSION = '0.930';
 
 =head1 NAME
 
@@ -29,7 +29,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.921
+Version 0.930
 
 =cut
 
