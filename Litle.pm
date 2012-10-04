@@ -16,7 +16,7 @@ use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 use IO::String;
 use Carp qw(croak);
-use Log::Scrubber qw($SCRUBBER scrubber :Carp);
+use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
@@ -531,6 +531,11 @@ sub map_request {
       ['invoice_number',15,     0,             0, 0 ], # TODO orderID = 25, invoiceReferenceNumber = 15
       [ 'orderdate',   10,      0,             0, 0 ], # YYYY-MM-DD
 
+      [ 'recycle_by',   8,      0,             0, 0 ],
+      [ 'recycle_id',  25,      0,             0, 0 ],
+
+      [ 'affiliate',   25,      0,             0, 0 ],
+
       [ 'card_type',    2,      2,             1, 0 ],
       [ 'card_number', 25,     13,             1, 0 ],
       [ 'expiration',   4,      4,             1, 0 ], # MMYY
@@ -669,6 +674,19 @@ sub map_request {
         authenticatedByMerchant     => 'authenticated',
       );
 
+    tie my %merchantdata, 'Tie::IxHash',
+      $self->revmap_fields(
+        content      => $content,
+        affiliate    => 'affiliate',
+      );
+
+    tie my %recyclingrequest, 'Tie::IxHash',
+      $self->revmap_fields(
+        content      => $content,
+        recycleBy    => 'recycle_by',
+        recycleId    => 'recycle_id',
+      );
+
     my %req;
 
     if ( $action eq 'sale' ) {
@@ -686,6 +704,8 @@ sub map_request {
             enhancedData  => \%enhanceddata,
             processingInstructions  =>  \%processing,
             allowPartialAuth => 'partial_auth',
+            merchantData => \%merchantdata,
+            recyclingRequest => \%recyclingrequest,
         );
     }
     elsif ( $action eq 'authorization' ) {
@@ -702,6 +722,8 @@ sub map_request {
             processingInstructions  =>  \%processing,
             customBilling => \%custombilling,
             allowPartialAuth => 'partial_auth',
+            merchantData     => \%merchantdata,
+            recyclingRequest => \%recyclingrequest,
         );
     }
     elsif ( $action eq 'capture' ) {
@@ -1673,17 +1695,12 @@ sub chargeback_activity_request {
     $self->{_response} = $response;
 
     my @response_list;
-    require Business::OnlinePayment::Litle::ChargebackActivityResponse;
     if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
         $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
     }
-    foreach my $case ( @{ $response->{caseActivity} } ) {
-        push @response_list,
-          Business::OnlinePayment::Litle::ChargebackActivityResponse->new($case);
-    }
 
     warn Dumper($response) if $DEBUG;
-    return \@response_list;
+    return $response->{caseActivity};
 }
 
 sub chargeback_update_request {

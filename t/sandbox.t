@@ -17,6 +17,9 @@ my %orig_content = (
     merchantid     =>  $merchantid,
     action         => 'Authorization Only', #'Normal Authorization',
     description    => 'BLU*BusinessOnlinePayment',
+    affiliate      => '123',
+    recycle_by     => 'Merchant',
+    recycle_id     => '1',
 #    card_number    => '4007000000027',
     card_number    => '4457010000000009',
     cvv2           => '123',
@@ -71,6 +74,17 @@ $tx->content(%orig_content);
 tx_check(
 	$tx,
 	desc          => "Auth Only",
+	is_success    => '1',
+	result_code   => '000',
+	error_message => 'Approved',
+	approved_amount => undef,
+);
+
+$orig_content{'action'} = 'Normal Authorization';
+$tx->content(%orig_content);
+tx_check(
+	$tx,
+	desc          => "Normal Auth",
 	is_success    => '1',
 	result_code   => '000',
 	error_message => 'Approved',
