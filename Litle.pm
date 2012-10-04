@@ -16,7 +16,7 @@ use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 use IO::String;
 use Carp qw(croak);
-use Log::Scrubber qw($SCRUBBER scrubber :Carp);
+use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
@@ -1697,17 +1697,12 @@ sub chargeback_activity_request {
     $self->{_response} = $response;
 
     my @response_list;
-    require Business::OnlinePayment::Litle::ChargebackActivityResponse;
     if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
         $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
     }
-    foreach my $case ( @{ $response->{caseActivity} } ) {
-        push @response_list,
-          Business::OnlinePayment::Litle::ChargebackActivityResponse->new($case);
-    }
 
     warn Dumper($response) if $DEBUG;
-    return \@response_list;
+    return $response->{caseActivity};
 }
 
 sub chargeback_update_request {
