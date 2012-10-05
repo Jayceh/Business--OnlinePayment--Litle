@@ -1018,7 +1018,7 @@ sub litle_support_doc {
     local $SCRUBBER=1;
     scrubber_init({($content{'password'}||'')=>'DELETED'});
 
-    my $requiredargs = ['case_id','filename'];
+    my $requiredargs = ['case_id','filename','merchantid'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
     foreach my $key (@$requiredargs) {
         croak "Missing arg $key" unless $content{$key};
@@ -1122,6 +1122,7 @@ sub chargeback_list_support_docs {
     scrubber_init({($content{'password'}||'')=>'DELETED'});
 
     croak "Missing arg case_id" unless $content{'case_id'};
+    croak "Missing arg merchantid" unless $content{'merchantid'};
     my $caseidURI = $content{'case_id'};
     my $merchantidURI = $content{'merchantid'};
     foreach ( $caseidURI, $merchantidURI ) {
@@ -1133,7 +1134,7 @@ sub chargeback_list_support_docs {
         headers => { Authorization => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",'') },
     } );
 
-    $self->server_request( scrubber $response->request->{'content'} );
+    $self->server_request( scrubber $url );
     $self->server_response( scrubber $response->{'content'} );
 
     my $xml_response = $self->parse_xml_response( $response->{'content'}, $response->{'status'} );
