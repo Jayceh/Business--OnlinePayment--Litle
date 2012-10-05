@@ -1700,9 +1700,14 @@ sub chargeback_activity_request {
     if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
         $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
     }
+    require Business::OnlinePayment::Litle::ChargebackActivityResponse;
+    foreach my $case ( @{ $response->{caseActivity} } ) {
+       push @response_list,
+       Business::OnlinePayment::Litle::ChargebackActivityResponse->new($case);
+    }
 
     warn Dumper($response) if $DEBUG;
-    return $response->{caseActivity};
+    return \@response_list;
 }
 
 sub chargeback_update_request {
