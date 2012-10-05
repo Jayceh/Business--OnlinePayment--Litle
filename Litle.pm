@@ -299,7 +299,7 @@ sub map_fields {
     local $SCRUBBER=1;
     scrubber_init({
         ($content->{'card_number'}||'')=>'DELETED',
-        ($content->{'cvv2'}||'')=>'DELETED',
+        ($content->{'cvv2'} ? '(?<=[^\d])'.$content->{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
         ($content->{'password'}||'')=>'DELETED'},
         );
 
@@ -400,7 +400,7 @@ sub format_misc_field {
     local $SCRUBBER=1;
     scrubber_init({
         ($content->{'card_number'}||'')=>'DELETED',
-        ($content->{'cvv2'}||'')=>'DELETED',
+        ($content->{'cvv2'} ? '(?<=[^\d])'.$content->{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
         ($content->{'password'}||'')=>'DELETED'},
         );
 
@@ -470,7 +470,7 @@ sub map_request {
     local $SCRUBBER=1;
     scrubber_init({
         ($content->{'card_number'}||'')=>'DELETED',
-        ($content->{'cvv2'}||'')=>'DELETED',
+        ($content->{'cvv2'} ? '(?<=[^\d])'.$content->{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
         ($content->{'password'}||'')=>'DELETED'},
         );
 
@@ -808,7 +808,7 @@ sub submit {
     local $SCRUBBER=1;
     scrubber_init({
         ($content{'card_number'}||'')=>'DELETED',
-        ($content{'cvv2'}||'')=>'DELETED',
+        ($content{'cvv2'} ? '(?<=[^\d])'.$content{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
         ($content{'password'}||'')=>'DELETED'},
         );
 
