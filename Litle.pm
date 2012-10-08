@@ -297,11 +297,7 @@ sub map_fields {
     my ( $self, $content ) = @_;
 
     local $SCRUBBER=1;
-    scrubber_init({
-        ($content->{'card_number'}||'')=>'DELETED',
-        ($content->{'cvv2'} ? '(?<=[^\d])'.$content->{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
-        ($content->{'password'}||'')=>'DELETED'},
-        );
+    $self->_litle_scrubber_init;
 
     my $action  = lc( $content->{'action'} );
     my %actions = (
@@ -398,11 +394,7 @@ sub format_misc_field {
     my ($self, $content, $trunc) = @_;
 
     local $SCRUBBER=1;
-    scrubber_init({
-        ($content->{'card_number'}||'')=>'DELETED',
-        ($content->{'cvv2'} ? '(?<=[^\d])'.$content->{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
-        ($content->{'password'}||'')=>'DELETED'},
-        );
+    $self->_litle_scrubber_init;
 
     use bytes; # make sure we truncate on bytes, not characters
 
@@ -468,11 +460,7 @@ sub map_request {
     my ( $self, $content ) = @_;
 
     local $SCRUBBER=1;
-    scrubber_init({
-        ($content->{'card_number'}||'')=>'DELETED',
-        ($content->{'cvv2'} ? '(?<=[^\d])'.$content->{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
-        ($content->{'password'}||'')=>'DELETED'},
-        );
+    $self->_litle_scrubber_init;
 
     $self->map_fields($content);
 
@@ -806,11 +794,7 @@ sub submit {
     my %content = $self->content();
 
     local $SCRUBBER=1;
-    scrubber_init({
-        ($content{'card_number'}||'')=>'DELETED',
-        ($content{'cvv2'} ? '(?<=[^\d])'.$content{'cvv2'}.'(?=[^\d])' : '')=>'DELETED',
-        ($content{'password'}||'')=>'DELETED'},
-        );
+    $self->_litle_scrubber_init;
 
     warn 'Pre processing: '.Dumper(\%content) if $DEBUG;
     my $req     = $self->map_request( \%content );
@@ -1016,7 +1000,7 @@ sub litle_support_doc {
     my %content = $self->content();
 
     local $SCRUBBER=1;
-    scrubber_init({($content{'password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     my $requiredargs = ['case_id','filename','merchantid'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
@@ -1119,7 +1103,7 @@ sub chargeback_list_support_docs {
 
     my %content = $self->content();
     local $SCRUBBER=1;
-    scrubber_init({($content{'password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     croak "Missing arg case_id" unless $content{'case_id'};
     croak "Missing arg merchantid" unless $content{'merchantid'};
@@ -1210,7 +1194,7 @@ sub create_batch {
     $self->is_success(0);
 
     local $SCRUBBER=1;
-    scrubber_init({($opts{'password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     if ( scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
         $self->error('Cannot create an empty batch');
@@ -1360,7 +1344,7 @@ sub send_rfr {
     my $post_data;
 
     local $SCRUBBER=1;
-    scrubber_init({($args->{'password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     $self->is_success(0);
     my $writer = new XML::Writer(
@@ -1452,7 +1436,7 @@ sub retrieve_batch {
     my ( $self, %opts ) = @_;
 
     local $SCRUBBER=1;
-    scrubber_init({($opts{'ftp_password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     croak "Missing filename" if !$opts{'batch_id'};
     my $post_data;
@@ -1581,6 +1565,17 @@ sub _xmlwrite {
     }
 }
 
+sub _litle_scrubber_init {
+    my ( $self ) = @_;
+    my %content = $self->content();
+    scrubber_init({
+        quotemeta($content{'password'}||'')=>'DELETED',
+        quotemeta($content{'ftp_password'}||'')=>'DELETED',
+        quotemeta($content{'card_number'}||'')=>'DELETED',
+        ($content{'cvv2'} ? '(?<=[^\d])'.quotemeta($content{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
+        });
+}
+
 #------------------------------------ Chargebacks
 
 sub chargeback_activity_request {
@@ -1591,7 +1586,7 @@ sub chargeback_activity_request {
     my %content = $self->content();
 
     local $SCRUBBER=1;
-    scrubber_init({($content{'password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
@@ -1717,7 +1712,7 @@ sub chargeback_update_request {
     my %content = $self->content();
 
     local $SCRUBBER=1;
-    scrubber_init({($content{'password'}||'')=>'DELETED'});
+    $self->_litle_scrubber_init;
 
     foreach my $key (qw(case_id merchant_activity_id activity )) {
         ## case_id
