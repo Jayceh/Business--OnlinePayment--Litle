@@ -375,6 +375,7 @@ sub map_fields {
 
 =head2 format_misc_field
 
+A new method not directly supported by BOP.
 Used internally to guarentee that XML data will conform to the Litle spec.
   field  - The hash key we are checking against
   maxLen - The maximum length allowed (extra bytes will be truncated)
@@ -418,6 +419,7 @@ sub format_misc_field {
 
 =head2 format_amount_field
 
+A new method not directly supported by BOP.
 Used internally to change amounts from the BOP "5.00" format to the format expected by Litle "500"
 
 $tx->format_amount_field( \%content, 'amount' );
@@ -434,6 +436,7 @@ sub format_amount_field {
 
 =head2 format_phone_field
 
+A new method not directly supported by BOP.
 Used internally to strip invalid characters from phone numbers. IE "1 (800).TRY-THIS" becomes "18008788447"
 
 $tx->format_phone_field( \%content, 'company_phone' );
@@ -456,6 +459,12 @@ sub format_phone_field {
         $data->{$field} =~ s/(\D)/$$convertPhone{lc($1)}||''/eg;
     }
 }
+
+=head2 map_request
+
+Converts the BOP data to something that Litle can use.
+
+=cut
 
 sub map_request {
     my ( $self, $content ) = @_;
@@ -544,7 +553,7 @@ sub map_request {
       #warn "$trunc->[0] => ".($content->{ $trunc->[0] }||'')."\n" if $DEBUG;
     }
 
-    tie my %billToAddress, 'Tie::IxHash', $self->revmap_fields(
+    tie my %billToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
         name         => 'name',
         email        => 'email',
@@ -557,7 +566,7 @@ sub map_request {
         phone => 'phone',
     );
 
-    tie my %shipToAddress, 'Tie::IxHash', $self->revmap_fields(
+    tie my %shipToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
         name         => 'ship_name',
         email        => 'ship_email',
@@ -571,13 +580,13 @@ sub map_request {
     );
 
     tie my %customerinfo, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content      => $content,
         customerType => 'customerType',
       );
 
     tie my %custombilling, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content      => $content,
         phone      => 'company_phone',
         descriptor => 'description',
@@ -608,7 +617,7 @@ sub map_request {
           foreach my $trunc ( @validate ) { $self->format_misc_field(\%prod,$trunc); }
 
           tie my %lineitem, 'Tie::IxHash',
-            $self->revmap_fields(
+            $self->_revmap_fields(
               content              => \%prod,
               itemSequenceNumber   => 'itemSequenceNumber',
               itemDescription      => 'description',
@@ -628,7 +637,7 @@ sub map_request {
 
     #
     #
-    tie my %enhanceddata, 'Tie::IxHash', $self->revmap_fields(
+    tie my %enhanceddata, 'Tie::IxHash', $self->_revmap_fields(
         content                => $content,
         customerReference      => 'po_number',
         salesTax               => 'salestax',
@@ -640,7 +649,7 @@ sub map_request {
         lineItemData           => \@products,
     );
 
-    tie my %card, 'Tie::IxHash', $self->revmap_fields(
+    tie my %card, 'Tie::IxHash', $self->_revmap_fields(
         content            => $content,
         type               => 'card_type',
         number             => 'card_number',
@@ -648,20 +657,20 @@ sub map_request {
         cardValidationNum  => 'cvv2',
     );
 
-    tie my %token, 'Tie::IxHash', $self->revmap_fields(
+    tie my %token, 'Tie::IxHash', $self->_revmap_fields(
         content            => $content,
         litleToken         => 'card_token',
         expDate            => 'expiration',
         cardValidationNum  => 'cvv2',
     );
 
-    tie my %processing, 'Tie::IxHash', $self->revmap_fields(
+    tie my %processing, 'Tie::IxHash', $self->_revmap_fields(
         content               => $content,
         bypassVelocityCheck   => 'velocity_check',
     );
 
     tie my %cardholderauth, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content                     => $content,
         authenticationValue         => '3ds',
         authenticationTransactionId => 'visaverified',
@@ -670,13 +679,14 @@ sub map_request {
       );
 
     tie my %merchantdata, 'Tie::IxHash',
-      $self->revmap_fields(
-        content      => $content,
-        affiliate    => 'affiliate',
+      $self->_revmap_fields(
+        content            => $content,
+        affiliate          => 'affiliate',
+        merchantGroupingId => 'merchant_grouping_id',
       );
 
     tie my %recyclingrequest, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content      => $content,
         recycleBy    => 'recycle_by',
         recycleId    => 'recycle_id',
@@ -686,7 +696,7 @@ sub map_request {
 
     if ( $action eq 'sale' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
-        tie %req, 'Tie::IxHash', $self->revmap_fields(
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
             content       => $content,
             orderId       => 'invoice_number',
             amount        => 'amount',
@@ -706,7 +716,7 @@ sub map_request {
     }
     elsif ( $action eq 'authorization' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
-        tie %req, 'Tie::IxHash', $self->revmap_fields(
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
             content       => $content,
             orderId       => 'invoice_number',
             amount        => 'amount',
@@ -726,7 +736,7 @@ sub map_request {
     elsif ( $action eq 'capture' ) {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
-          $self->revmap_fields(
+          $self->_revmap_fields(
             content      => $content,
             litleTxnId   => 'order_number',
             amount       => 'amount',
@@ -739,7 +749,7 @@ sub map_request {
        # IF there is a litleTxnId, it's a normal linked credit
        if( $content->{'order_number'} ){
           push @required_fields, qw( order_number amount );
-          tie %req, 'Tie::IxHash', $self->revmap_fields(
+          tie %req, 'Tie::IxHash', $self->_revmap_fields(
               content       => $content,
               litleTxnId    => 'order_number',
               amount        => 'amount',
@@ -751,7 +761,7 @@ sub map_request {
        else {
           croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
           push @required_fields, qw( invoice_number amount );
-          tie %req, 'Tie::IxHash', $self->revmap_fields(
+          tie %req, 'Tie::IxHash', $self->_revmap_fields(
               content       => $content,
               orderId       => 'invoice_number',
               amount        => 'amount',
@@ -767,7 +777,7 @@ sub map_request {
     elsif ( $action eq 'void' ) {
         push @required_fields, qw( order_number );
         tie %req, 'Tie::IxHash',
-          $self->revmap_fields(
+          $self->_revmap_fields(
             content                 => $content,
             litleTxnId              => 'order_number',
             processingInstructions  =>  \%processing,
@@ -776,7 +786,7 @@ sub map_request {
     elsif ( $action eq 'authReversal' ) {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
-          $self->revmap_fields(
+          $self->_revmap_fields(
             content    => $content,
             litleTxnId => 'order_number',
             amount     => 'amount',
@@ -785,7 +795,7 @@ sub map_request {
     elsif ( $action eq 'accountUpdate' ) {
         push @required_fields, qw( card_number expiration );
         tie %req, 'Tie::IxHash',
-          $self->revmap_fields(
+          $self->_revmap_fields(
             content => $content,
             orderId => 'customer_id',
             card    => \%card,
@@ -820,7 +830,7 @@ sub submit {
 
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content  => \%content,
         user     => 'login',
         password => 'password',
@@ -868,7 +878,7 @@ sub submit {
     $self->server_response( scrubber $page );
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
 
-    my $response = $self->parse_xml_response( $page, $status_code );
+    my $response = $self->_parse_xml_response( $page, $status_code );
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
         warn Dumper $response, $self->server_request;
@@ -939,12 +949,13 @@ sub submit {
 
 =head2 chargeback_retrieve_support_doc
 
+A new method not directly supported by BOP.
 Retrieve a currently uploaded file
 
  $tx->content(
   login       => 'testdrive',
   password    => '123qwe',
-  mercahntid  => '123456',
+  merchantid  => '123456',
   case_id     => '001',
   filename    => 'mydoc.pdf',
  );
@@ -955,29 +966,31 @@ Retrieve a currently uploaded file
 
 sub chargeback_retrieve_support_doc {
     my ( $self ) = @_;
-    $self->litle_support_doc('RETRIEVE');
+    $self->_litle_support_doc('RETRIEVE');
     if ($self->is_success) { $self->{'fileContent'} = $self->{'_response'}; } else { $self->{'fileContent'} = undef; }
 }
 
 =head2 chargeback_delete_support_doc
 
+A new method not directly supported by BOP.
 Delete a currently uploaded file.  Follows the same format as chargeback_retrieve_support_doc
 
 =cut
 
 sub chargeback_delete_support_doc {
     my ( $self ) = @_;
-    $self->litle_support_doc('DELETE' );
+    $self->_litle_support_doc('DELETE' );
 }
 
 =head2 chargeback_upload_support_doc
 
+A new method not directly supported by BOP.
 Upload a new file
 
  $tx->content(
   login       => 'testdrive',
   password    => '123qwe',
-  mercahntid  => '123456',
+  merchantid  => '123456',
   case_id     => '001',
   filename    => 'mydoc.pdf',
   filecontent => $binaryPdfData,
@@ -989,21 +1002,22 @@ Upload a new file
 
 sub chargeback_upload_support_doc {
     my ( $self ) = @_;
-    $self->litle_support_doc('UPLOAD' );
+    $self->_litle_support_doc('UPLOAD' );
 }
 
 =head2 chargeback_replace_support_doc
 
+A new method not directly supported by BOP.
 Replace a previously uploaded file.  Follows the same format as chargeback_upload_support_doc
 
 =cut
 
 sub chargeback_replace_support_doc {
     my ( $self ) = @_;
-    $self->litle_support_doc('REPLACE' );
+    $self->_litle_support_doc('REPLACE' );
 }
 
-sub litle_support_doc {
+sub _litle_support_doc {
     my ( $self, $action ) = @_;
 
     $self->is_success(0);
@@ -1031,7 +1045,7 @@ sub litle_support_doc {
       if ( defined $content{'filecontent'} ) {
           if ( length($content{'filecontent'}) > 2097152 ) { # file limit of 2M
               my $msg = 'Filesize Exceeds Limit Of 2MB';
-              $self->result_code( 012 );
+              $self->result_code( 012 ); ## no critic
               $self->error_message( $msg );
               croak $msg;
           }
@@ -1071,7 +1085,7 @@ sub litle_support_doc {
         # the RETRIEVE action returns the actual page as the file, rather then returning XML
         $self->is_success(1);
     } else {
-        my $xml_response = $self->parse_xml_response( $response->{'content'}, $response->{'status'} );
+        my $xml_response = $self->_parse_xml_response( $response->{'content'}, $response->{'status'} );
 
         if (defined $xml_response && defined $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'}) {
             $self->is_success( $xml_response->{'ChargebackCase'}{'Document'}{'ResponseCode'} eq '000' ? 1 : 0 );
@@ -1083,14 +1097,15 @@ sub litle_support_doc {
     }
 }
 
-=head2 list_support_docs
+=head2 chargeback_list_support_docs
 
+A new method not directly supported by BOP.
 Return a hashref that contains a list of files that already exist on the server.
 
  $tx->content(
   login       => 'testdrive',
   password    => '123qwe',
-  mercahntid  => '123456',
+  merchantid  => '123456',
   case_id     => '001',
  );
  my $ret = $tx->chargeback_list_support_docs();
@@ -1131,7 +1146,7 @@ sub chargeback_list_support_docs {
     $self->server_request( scrubber $url );
     $self->server_response( scrubber $response->{'content'} );
 
-    my $xml_response = $self->parse_xml_response( $response->{'content'}, $response->{'status'} );
+    my $xml_response = $self->_parse_xml_response( $response->{'content'}, $response->{'status'} );
 
     if (defined $xml_response && $xml_response->{'ChargebackCase'}{'ResponseCode'}) {
         $self->result_code( $xml_response->{'ChargebackCase'}{'ResponseCode'} );
@@ -1152,7 +1167,7 @@ sub chargeback_list_support_docs {
     return {};
 }
 
-sub parse_xml_response {
+sub _parse_xml_response {
     my ( $self, $page, $status_code ) = @_;
     my $response = {};
     if ( $status_code =~ /^200/ ) {
@@ -1168,7 +1183,7 @@ sub parse_xml_response {
     return $response;
 }
 
-sub parse_batch_response {
+sub _parse_batch_response {
     my ( $self, $args ) = @_;
     my @results;
     my $resp = $self->{'batch_response'};
@@ -1179,14 +1194,15 @@ sub parse_batch_response {
       grep { $_ =~ m/Response$/ }
       keys %{$resp};    ## get a list of result types in this batch
     return {
-        'account_update' => $self->get_update_response,
+        'account_update' => $self->_get_update_response,
         ## do the other response types now
     };
 }
 
 =head2 add_item
 
-A new method, not supported under BOP yet, but interface to adding multiple entries, so we can write and interface with batches
+A new method not directly supported by BOP.
+Interface to adding multiple entries, so we can write and interface with batches
 
  $tx->add_item( \%content );
 
@@ -1197,6 +1213,31 @@ sub add_item {
     ## do we want to render it now, or later?
     push @{ $self->{'batch_entries'} }, shift;
 }
+
+=head2 create_batch
+
+A new method not directly supported by BOP.
+Send the current batch to Litle.
+
+ $tx->add_item( $item );
+ $tx->add_item( $item );
+ $tx->add_item( $item );
+
+ my $opts = {
+  login       => 'testdrive',
+  password    => '123qwe',
+  merchantid  => '123456',
+  batch_id    => '001',
+  method      => 'https', # sftp or https
+  ftp_username=> 'fred',
+  ftp_password=> 'pancakes',
+ };
+
+ $tx->content();
+
+ $tx->create_batch( %$opts );
+
+=cut
 
 sub create_batch {
     my ( $self, %opts ) = @_;
@@ -1221,7 +1262,7 @@ sub create_batch {
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content  => \%opts,
         user     => 'login',
         password => 'password',
@@ -1351,6 +1392,12 @@ sub create_batch {
 
 }
 
+=head2 send_rfr
+
+A new method not directly supported by BOP.
+
+=cut
+
 sub send_rfr {
     my ( $self, $args ) = @_;
     my $post_data;
@@ -1367,7 +1414,7 @@ sub send_rfr {
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content  => $args,
         user     => 'login',
         password => 'password',
@@ -1440,9 +1487,29 @@ sub send_rfr {
         my $resp = $response->{'batchResponse'};
         $self->is_success( $resp->{'response'} eq '000' ? 1 : 0 );
         $self->{'batch_response'} = $resp;
-        $self->parse_batch_response;
+        $self->_parse_batch_response;
     }
 }
+
+=head2 retrieve_batch
+
+A new method not directly supported by BOP.
+Get a batch from Litle.
+
+ my $opts = {
+  login       => 'testdrive',
+  password    => '123qwe',
+  batch_id    => '001',
+  batch_return=> '',
+  ftp_username=> 'fred',
+  ftp_password=> 'pancakes',
+ };
+
+ $tx->content();
+
+ $tx->retrieve_batch( %$opts );
+
+=cut
 
 sub retrieve_batch {
     my ( $self, %opts ) = @_;
@@ -1500,11 +1567,11 @@ sub retrieve_batch {
     $self->is_success( $response->{'response'} eq '0' ? 1 : 0 );
     if ( $self->is_success() ) {
         $self->{'batch_response'} = $resp;
-        return $self->parse_batch_response;
+        return $self->_parse_batch_response;
     }
 }
 
-sub get_update_response {
+sub _get_update_response {
     my $self = shift;
     require Business::OnlinePayment::Litle::UpdaterResponse;
     my @response;
@@ -1517,7 +1584,7 @@ sub get_update_response {
     return \@response;
 }
 
-sub revmap_fields {
+sub _revmap_fields {
     my $self = shift;
     tie my (%map), 'Tie::IxHash', @_;
     my %content;
@@ -1525,7 +1592,7 @@ sub revmap_fields {
         %content = %{ delete( $map{'content'} ) };
     }
     else {
-        warn "WARNING: This content has no been pre-processed with map_fields";
+        warn "WARNING: This content has not been pre-processed with map_fields";
         %content = $self->content();
     }
 
@@ -1588,7 +1655,19 @@ sub _litle_scrubber_init {
         });
 }
 
-#------------------------------------ Chargebacks
+=head2 chargeback_activity_request
+
+Return a arrayref that contains a list of Business::OnlinePayment::Litle::ChargebackActivityResponse objects
+
+ $tx->content(
+  login         => 'testdrive',
+  password      => '123qwe',
+  activity_date => '2012-04-30',
+ );
+
+ my $ret = $tx->chargeback_activity_request();
+
+=cut
 
 sub chargeback_activity_request {
     my ( $self ) = @_;
@@ -1629,7 +1708,7 @@ sub chargeback_activity_request {
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content  => \%content,
         user     => 'login',
         password => 'password',
@@ -1716,6 +1795,27 @@ sub chargeback_activity_request {
     return \@response_list;
 }
 
+=head2 chargeback_update_request
+
+Return a arrayref that contains a list of Business::OnlinePayment::Litle::ChargebackActivityResponse objects
+
+ $tx->content(
+  login                => 'testdrive',
+  password             => '123qwe',
+  case_id              => '1600010045',
+  merchant_activity_id => '1555',
+  activity             => 'Merchant Accepts Liability',
+ );
+
+ $tx->chargeback_update_request();
+
+ $tx->result_code(); # 0 - success, 1 invalid xml
+ $tx->error_message(); # Text version of the error message, if any
+ $tx->phoenixTxnId(); # Unique identifier provided by Litle.
+ $tx->is_success(); # Boolean, did the request work
+
+=cut
+
 sub chargeback_update_request {
     my ( $self ) = @_;
     my $post_data;
@@ -1741,7 +1841,7 @@ sub chargeback_update_request {
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
-      $self->revmap_fields(
+      $self->_revmap_fields(
         content  => \%content,
         user     => 'login',
         password => 'password',
@@ -1892,7 +1992,6 @@ by the Free Software Foundation; or the Artistic License.
 
 See http://dev.perl.org/licenses/ for more information.
 
-=back
 
 
 =head1 SEE ALSO
