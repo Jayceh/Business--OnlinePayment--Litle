@@ -376,6 +376,7 @@ sub map_fields {
 =head2 format_misc_field
 
 Used internally to guarentee that XML data will conform to the Litle spec.
+  field  - The hash key we are checking against
   maxLen - The maximum length allowed (extra bytes will be truncated)
   minLen - The minimum length allowed
   errorOnLength - boolean
@@ -482,7 +483,7 @@ sub map_request {
     if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # shema req
     $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
 
-    # Litle pre 0.934 used token, howeever BOP likes card_token
+    # Litle pre 0.934 used token, however BOP likes card_token
     $content->{'card_token'} = $content->{'token'} if ! defined $content->{'card_token'} && defined $content->{'card_token'};
 
     # only numbers are allowed in company_phone
@@ -684,6 +685,7 @@ sub map_request {
     my %req;
 
     if ( $action eq 'sale' ) {
+        croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             content       => $content,
             orderId       => 'invoice_number',
@@ -703,6 +705,7 @@ sub map_request {
         );
     }
     elsif ( $action eq 'authorization' ) {
+        croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->revmap_fields(
             content       => $content,
             orderId       => 'invoice_number',
@@ -746,6 +749,7 @@ sub map_request {
         }
        # ELSE it's an unlinked, which requires different data
        else {
+          croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
           push @required_fields, qw( invoice_number amount );
           tie %req, 'Tie::IxHash', $self->revmap_fields(
               content       => $content,

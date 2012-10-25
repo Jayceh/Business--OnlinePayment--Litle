@@ -107,6 +107,17 @@ tx_check(
 	approved_amount => undef,
 );
 
+$orig_content{'action'} = 'Normal Authorization';
+%content = %orig_content;
+$content{'card_number'} = '';
+$content{'card_token'} = '';
+$tx->content(%content);
+$tx->test_transaction('sandbox');
+eval {
+    $tx->submit;
+};
+like( $@ , qr/missing card_token or card_number/, 'Check for missing card_token or card_number error' );
+
 sub tx_check {
     my $tx = shift;
     my %o  = @_;
