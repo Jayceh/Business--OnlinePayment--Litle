@@ -488,6 +488,8 @@ sub map_request {
     # only numbers are allowed in company_phone
     $self->format_phone_field($content, 'company_phone');
 
+    $content->{'invoice_number_length_15'} ||= $content->{'invoice_number'}; # orderId = 25, invoiceReferenceNumber = 15
+
     #  put in a list of constraints
     my @validate = (
       # field,     maxLen, minLen, errorOnLength, isRequired
@@ -519,7 +521,8 @@ sub map_request {
       [ 'discount',     8,      0,             1, 0 ],
       [ 'shipping',     8,      0,             1, 0 ],
       [ 'duty',         8,      0,             1, 0 ],
-      ['invoice_number',15,     0,             0, 0 ], # TODO orderID = 25, invoiceReferenceNumber = 15
+      ['invoice_number',25,     0,             0, 0 ],
+      ['invoice_number_length_15',15,0,        0, 0 ],
       [ 'orderdate',   10,      0,             0, 0 ], # YYYY-MM-DD
 
       [ 'recycle_by',   8,      0,             0, 0 ],
@@ -631,7 +634,7 @@ sub map_request {
         discountAmount         => 'discount',
         shippingAmount         => 'shipping',
         dutyAmount             => 'duty',
-        invoiceReferenceNumber => 'invoice_number',    ##
+        invoiceReferenceNumber => 'invoice_number_length_15',
         orderDate              => 'orderdate',
         lineItemData           => \@products,
     );
