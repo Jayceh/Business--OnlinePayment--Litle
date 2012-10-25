@@ -482,6 +482,9 @@ sub map_request {
     if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # shema req
     $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
 
+    # Litle pre 0.934 used token, howeever BOP likes card_token
+    $content->{'card_token'} = $content->{'token'} if ! defined $content->{'card_token'} && defined $content->{'card_token'};
+
     # only numbers are allowed in company_phone
     $self->format_phone_field($content, 'company_phone');
 
@@ -528,7 +531,7 @@ sub map_request {
       [ 'card_number', 25,     13,             1, 0 ],
       [ 'expiration',   4,      4,             1, 0 ], # MMYY
       [ 'cvv2',         4,      3,             1, 0 ],
-      # 'token' does not have a documented limit
+      # 'card_token' does not have a documented limit
 
       [ 'customer_id', 25,      0,             0, 0 ],
     );
@@ -643,7 +646,7 @@ sub map_request {
 
     tie my %token, 'Tie::IxHash', $self->revmap_fields(
         content            => $content,
-        litleToken         => 'token',
+        litleToken         => 'card_token',
         expDate            => 'expiration',
         cardValidationNum  => 'cvv2',
     );
@@ -684,8 +687,8 @@ sub map_request {
             amount        => 'amount',
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
-            card          => \%card,
-            token         => $content->{'token'} ? \%token : {},
+            card          => $content->{'card_number'} ? \%card : {},
+            token         => $content->{'card_token'} ? \%token : {},
 
             #cardholderAuthentication    =>  \%cardholderauth,
             customBilling => \%custombilling,
@@ -703,8 +706,8 @@ sub map_request {
             amount        => 'amount',
             orderSource   => 'orderSource',
             billToAddress => \%billToAddress,
-            card          => \%card,
-            token         => $content->{'token'} ? \%token : {},
+            card          => $content->{'card_number'} ? \%card : {},
+            token         => $content->{'card_token'} ? \%token : {},
 
             #cardholderAuthentication    =>  \%cardholderauth,
             processingInstructions  =>  \%processing,
@@ -747,8 +750,8 @@ sub map_request {
               amount        => 'amount',
               orderSource   => 'orderSource',
               billToAddress => \%billToAddress,
-              card          => \%card,
-              token         => $content->{'token'} ? \%token : {},
+              card          => $content->{'card_number'} ? \%card : {},
+              token         => $content->{'card_token'} ? \%token : {},
               customBilling => \%custombilling,
               processingInstructions => \%processing,
           );
