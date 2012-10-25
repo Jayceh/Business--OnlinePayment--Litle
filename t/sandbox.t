@@ -70,7 +70,8 @@ my %orig_content = (
 );
 
 my $tx = Business::OnlinePayment->new("Litle", @opts);
-$tx->content(%orig_content);
+my %content = %orig_content;
+$tx->content(%content);
 tx_check(
 	$tx,
 	desc          => "Auth Only",
@@ -81,7 +82,8 @@ tx_check(
 );
 
 $orig_content{'action'} = 'Normal Authorization';
-$tx->content(%orig_content);
+%content = %orig_content;
+$tx->content(%content);
 tx_check(
 	$tx,
 	desc          => "Normal Auth",
@@ -90,6 +92,31 @@ tx_check(
 	error_message => 'Approved',
 	approved_amount => undef,
 );
+
+$orig_content{'action'} = 'Normal Authorization';
+%content = %orig_content;
+$content{'card_number'} = '';
+$content{'card_token'} = '0000000000000';
+$tx->content(%content);
+tx_check(
+	$tx,
+	desc          => "Normal Auth",
+	is_success    => '1',
+	result_code   => '000',
+	error_message => 'Approved',
+	approved_amount => undef,
+);
+
+$orig_content{'action'} = 'Normal Authorization';
+%content = %orig_content;
+$content{'card_number'} = '';
+$content{'card_token'} = '';
+$tx->content(%content);
+$tx->test_transaction('sandbox');
+eval {
+    $tx->submit;
+};
+like( $@ , qr/missing card_token or card_number/, 'Check for missing card_token or card_number error' );
 
 sub tx_check {
     my $tx = shift;
