@@ -1638,7 +1638,6 @@ sub _xmlwrite {
     }
     else {
         $writer->startTag($item);
-        utf8::decode($value); # prevent double byte corruption in the xml output
         $writer->characters($value);
         $writer->endTag($item);
     }
