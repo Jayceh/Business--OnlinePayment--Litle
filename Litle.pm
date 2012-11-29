@@ -16,12 +16,12 @@ use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 use IO::String;
 use Carp qw(croak);
-use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp);
+use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.932';
+$VERSION = '0.933';
 
 =head1 NAME
 
@@ -88,9 +88,61 @@ Returns the response error description text.
 
 Returns the complete request that was sent to the server.  The request has been stripped of card_num, cvv2, and password.  So it should be safe to log.
 
+=cut
+
+sub server_request {
+    my ( $self, $val, $tf ) = @_;
+    if ($val) {
+        $self->{server_request} = scrubber $val;
+        $self->server_request_dangerous($val,1) unless $tf;
+    }
+    return $self->{server_request};
+}
+
+=head2 server_request_dangerous
+
+Returns the complete request that was sent to the server.  This could contain data that is NOT SAFE to log.  It should only be used in a test environment, or in a PCI compliant manner.
+
+=cut
+
+sub server_request_dangerous {
+    my ( $self, $val, $tf ) = @_;
+    if ($val) {
+        $self->{server_request_dangerous} = $val;
+        $self->server_request($val,1) unless $tf;
+    }
+    return $self->{server_request_dangerous};
+}
+
 =head2 server_response
 
 Returns the complete response from the server.  The response has been stripped of card_num, cvv2, and password.  So it should be safe to log.
+
+=cut
+
+sub server_response {
+    my ( $self, $val, $tf ) = @_;
+    if ($val) {
+        $self->{server_response} = scrubber $val;
+        $self->server_response_dangerous($val,1) unless $tf;
+    }
+    return $self->{server_response};
+}
+
+=head2 server_response_dangerous
+
+Returns the complete response from the server.  This could contain data that is NOT SAFE to log.  It should only be used in a test environment, or in a PCI compliant manner.
+
+=cut
+
+sub server_response_dangerous {
+    my ( $self, $val, $tf ) = @_;
+    if ($val) {
+        $self->{server_response_dangerous} = $val;
+        $self->server_response($val,1) unless $tf;
+    }
+    return $self->{server_response_dangerous};
+}
 
 =head1 Handling of content(%content) data:
 
@@ -190,7 +242,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL phoenixTxnId server_request server_response
+          verify_SSL phoenixTxnId
           )
     );
 
@@ -870,12 +922,12 @@ sub submit {
     $writer->end();
     ## END XML Generation
 
-    $self->server_request( scrubber $post_data );
+    $self->server_request( $post_data );
     warn $self->server_request if $DEBUG;
 
     my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
 
-    $self->server_response( scrubber $page );
+    $self->server_response( $page );
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
 
     my $response = $self->_parse_xml_response( $page, $status_code );
@@ -1078,8 +1130,8 @@ sub _litle_support_doc {
         content => $content{'filecontent'},
     } );
 
-    $self->server_request( scrubber $content{'mimetype'} );
-    $self->server_response( scrubber $response->{'content'} );
+    $self->server_request( $content{'mimetype'} );
+    $self->server_response( $response->{'content'} );
 
     if ( $action eq 'RETRIEVE' && $response->{'status'} =~ /^200/ && substr($response->{'content'},0,500) !~ /<Merchant/x) {
         # the RETRIEVE action returns the actual page as the file, rather then returning XML
@@ -1143,8 +1195,8 @@ sub chargeback_list_support_docs {
         headers => { Authorization => 'Basic ' . MIME::Base64::encode("$content{'login'}:$content{'password'}",'') },
     } );
 
-    $self->server_request( scrubber $url );
-    $self->server_response( scrubber $response->{'content'} );
+    $self->server_request( $url );
+    $self->server_response( $response->{'content'} );
 
     my $xml_response = $self->_parse_xml_response( $response->{'content'}, $response->{'status'} );
 
@@ -1204,6 +1256,15 @@ sub _parse_batch_response {
 A new method not directly supported by BOP.
 Interface to adding multiple entries, so we can write and interface with batches
 
+ my %content = (
+   action          =>  'Account Update',
+   card_number     =>  4111111111111111,
+   expiration      =>  1216,
+   customer_id     =>  $card->{'uid'},
+   invoice_number  =>  123,
+   type            =>  'VI',
+   login           =>  $merchant->{'login'},
+ );
  $tx->add_item( \%content );
 
 =cut
@@ -1243,12 +1304,14 @@ sub create_batch {
     my ( $self, %opts ) = @_;
 
     $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_scrubber_init(\%opts);
 
-    if ( scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
-        $self->error('Cannot create an empty batch');
+    if ( ! defined $self->{'batch_entries'} || scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
+        $self->error_message('Cannot create an empty batch');
         return;
     }
 
@@ -1289,6 +1352,7 @@ sub create_batch {
     );
     foreach my $entry ( @{ $self->{'batch_entries'} } ) {
         $self->content( %{$entry} );
+        $self->_litle_scrubber_add_card($entry->{'card_number'});
         my %content = $self->content;
         my $req     = $self->map_request( \%content );
         $writer->startTag(
@@ -1308,6 +1372,9 @@ sub create_batch {
     $writer->end();
     ## END XML Generation
 
+    $self->server_request( $post_data );
+    warn $self->server_request if $DEBUG;
+
     #----- Send it
     if ( $opts{'method'} && $opts{'method'} eq 'sftp' ) {    #FTP
         require Net::SFTP::Foreign;
@@ -1316,7 +1383,7 @@ sub create_batch {
             user     => $opts{'ftp_username'},
             password => $opts{'ftp_password'},
         );
-        $sftp->error and die "SSH connection failed: " . $sftp->error;
+        $sftp->error and die "SSH connection failed: " . $sftp->error . "\n";
 
         $sftp->setcwd("inbound")
           or die "Cannot change working directory ", $sftp->error;
@@ -1329,15 +1396,14 @@ sub create_batch {
             "$filename.asc" ) #once complete, you rename it, for pickup
           or die "Cannot RENAME file", $sftp->message;
         $self->is_success(1);
+        $self->server_response( $sftp->message );
     }
     elsif ( $opts{'method'} && $opts{'method'} eq 'https' ) {    #https post
         $self->port('15000');
         $self->path('/');
         my ( $page, $status_code, %headers ) =
           $self->https_post($post_data);
-        $self->server_request( scrubber $post_data );
-        $self->server_response( scrubber $page );
-        warn $self->server_request if $DEBUG;
+        $self->server_response( $page );
 
         warn Dumper [ $page, $status_code, \%headers ] if $DEBUG;
 
@@ -1448,8 +1514,8 @@ sub send_rfr {
     $self->path('/');
     my ( $page, $status_code, %headers ) = $self->https_post($post_data);
 
-    $self->server_request( scrubber $post_data );
-    $self->server_response( scrubber $page );
+    $self->server_request( $post_data );
+    $self->server_response( $page );
     warn $self->server_request if $DEBUG;
 
     warn Dumper [ $page, $status_code, \%headers ] if $DEBUG;
@@ -1555,8 +1621,8 @@ sub retrieve_batch {
         $self->error_message( $response->{'batchResponse'}->{'message'} );
     }
 
-    $self->server_request( scrubber $post_data );
-    $self->server_response( scrubber $response );
+    $self->server_request( $post_data );
+    $self->server_response( $response );
 
     $self->{_response} = $response;
     my $resp = $response->{'batchResponse'};
@@ -1636,21 +1702,28 @@ sub _xmlwrite {
     }
     else {
         $writer->startTag($item);
-        utf8::decode($value); # prevent double byte corruption in the xml output
         $writer->characters($value);
         $writer->endTag($item);
     }
 }
 
+sub _litle_scrubber_add_card {
+    my ( $self, $cc ) = @_;
+    return if ! $cc;
+    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
+    scrubber_add_scrubber({$cc=>$del});
+}
+
 sub _litle_scrubber_init {
-    my ( $self ) = @_;
+    my ( $self, $opts ) = @_;
     my %content = $self->content();
+    if ($opts) { %content = %$opts; }
     scrubber_init({
         quotemeta($content{'password'}||'')=>'DELETED',
         quotemeta($content{'ftp_password'}||'')=>'DELETED',
-        quotemeta($content{'card_number'}||'')=>'DELETED',
         ($content{'cvv2'} ? '(?<=[^\d])'.quotemeta($content{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
         });
+    $self->_litle_scrubber_add_card($content{'card_number'});
 }
 
 =head2 chargeback_activity_request
