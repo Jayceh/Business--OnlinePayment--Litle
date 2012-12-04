@@ -21,7 +21,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.933';
+$VERSION = '0.934';
 
 =head1 NAME
 
@@ -29,7 +29,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.932
+Version 0.934
 
 =cut
 
@@ -450,10 +450,9 @@ sub format_misc_field {
     local $SCRUBBER=1;
     $self->_litle_scrubber_init;
 
-    use bytes; # make sure we truncate on bytes, not characters
-
     if( defined $content->{ $trunc->[0] } ) {
-      my $len = bytes::length( $content->{ $trunc->[0] } );
+      utf8::upgrade($content->{ $trunc->[0] });
+      my $len = length( $content->{ $trunc->[0] } );
       if ( $trunc->[3] && $trunc->[2] && $len != 0 && $len < $trunc->[2] ) {
         # Zero is a valid length (mostly for cvv2 value)
         croak "$trunc->[0] has too few characters";
@@ -461,7 +460,7 @@ sub format_misc_field {
       elsif ( $trunc->[3] && $trunc->[1] && $len > $trunc->[1] ) {
         croak "$trunc->[0] has too many characters";
       }
-      $content->{ $trunc->[0] } = bytes::substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
+      $content->{ $trunc->[0] } = substr($content->{ $trunc->[0] } , 0, $trunc->[1] );
       #warn "$trunc->[0] => $len => $content->{ $trunc->[0] }\n" if $DEBUG;
     }
     elsif ( $trunc->[4] ) {
@@ -877,7 +876,7 @@ sub submit {
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
-        ENCODING    => 'utf8',
+        ENCODING    => 'utf-8',
     );
 
     ## set the authentication data
@@ -925,7 +924,12 @@ sub submit {
     $self->server_request( $post_data );
     warn $self->server_request if $DEBUG;
 
-    my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
+    if ( $] ge '5.008' ) {
+        # http_post expects data in this format
+        utf8::encode($post_data) if utf8::is_utf8($post_data);
+    }
+
+    my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml; charset=utf-8' } , $post_data);
 
     $self->server_response( $page );
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
@@ -1321,7 +1325,7 @@ sub create_batch {
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
-        ENCODING    => 'utf8',
+        ENCODING    => 'utf-8',
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
@@ -1474,7 +1478,7 @@ sub send_rfr {
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
-        ENCODING    => 'utf8',
+        ENCODING    => 'utf-8',
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
@@ -1775,7 +1779,7 @@ sub chargeback_activity_request {
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
-        ENCODING    => 'utf8',
+        ENCODING    => 'utf-8',
     );
     ## set the authentication data
     tie my %authentication, 'Tie::IxHash',
@@ -1808,10 +1812,10 @@ sub chargeback_activity_request {
 
     $self->{'_post_data'} = $post_data;
     warn $self->{'_post_data'} if $DEBUG;
-    #my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml;charset:utf-8' } , $post_data);
+    #my ( $page, $status_code, %headers ) = $self->https_post( { 'Content-Type' => 'text/xml; charset=utf-8' } , $post_data);
     my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
     my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
-        headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
+        headers => { 'Content-Type' => 'text/xml; charset=utf-8', },
         content => $post_data,
     } );
 
@@ -1951,7 +1955,7 @@ sub chargeback_update_request {
     #my ( $page, $status_code, %headers ) = $self->https_post($post_data);
     my $url = 'https://'.$self->chargeback_server.':'.$self->chargeback_port.'/'.$self->chargeback_path;
     my $tiny_response = HTTP::Tiny->new( verify_SSL=>$self->verify_SSL )->request('POST', $url, {
-        headers => { 'Content-Type' => 'text/xml;charset:utf-8', },
+        headers => { 'Content-Type' => 'text/xml; charset=utf-8', },
         content => $post_data,
     } );
 
