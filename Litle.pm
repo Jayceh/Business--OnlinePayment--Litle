@@ -1384,6 +1384,8 @@ sub create_batch {
         require Net::SFTP::Foreign;
         my $sftp = Net::SFTP::Foreign->new(
             $self->server(),
+            timeout  => 90,
+            stderr_discard => 1, # disable ftp banner
             user     => $opts{'ftp_username'},
             password => $opts{'ftp_password'},
         );
@@ -1596,6 +1598,8 @@ sub retrieve_batch {
         require Net::SFTP::Foreign;
         my $sftp = Net::SFTP::Foreign->new(
             $self->server(),
+            timeout  => 90,
+            stderr_discard => 1, # disable ftp banner
             user     => $opts{'ftp_username'},
             password => $opts{'ftp_password'},
         );
