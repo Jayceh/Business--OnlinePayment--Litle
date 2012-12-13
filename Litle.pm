@@ -21,7 +21,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.935';
+$VERSION = '0.936';
 
 =head1 NAME
 
@@ -29,7 +29,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.935
+Version 0.936
 
 =cut
 
@@ -1284,9 +1284,9 @@ sub add_item {
 A new method not directly supported by BOP.
 Send the current batch to Litle.
 
- $tx->add_item( $item );
- $tx->add_item( $item );
- $tx->add_item( $item );
+ $tx->add_item( $item1 );
+ $tx->add_item( $item2 );
+ $tx->add_item( $item3 );
 
  my $opts = {
   login       => 'testdrive',
@@ -1381,26 +1381,18 @@ sub create_batch {
 
     #----- Send it
     if ( $opts{'method'} && $opts{'method'} eq 'sftp' ) {    #FTP
-        require Net::SFTP::Foreign;
-        my $sftp = Net::SFTP::Foreign->new(
-            $self->server(),
-            timeout  => 90,
-            stderr_discard => 1, # disable ftp banner
-            user     => $opts{'ftp_username'},
-            password => $opts{'ftp_password'},
-        );
-        $sftp->error and die "SSH connection failed: " . $sftp->error . "\n";
+        my $sftp = $self->_sftp_connect(\%opts,'inbound');
 
-        $sftp->setcwd("inbound")
-          or die "Cannot change working directory ", $sftp->error;
         ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
-
         my $filename = $opts{'batch_id'} || $opts{'login'} . "_" . time;
-        $sftp->put_content( $post_data, "$filename.prg" )
-          or die "Cannot PUT $filename", $sftp->error;
+        my $io = IO::String->new($post_data);
+        tie *IO, 'IO::String';
+
+        $sftp->put( $io, "$filename.prg" )
+          or $self->_die("Cannot PUT $filename", $sftp->error);
         $sftp->rename( "$filename.prg",
-            "$filename.asc" ) #once complete, you rename it, for pickup
-          or die "Cannot RENAME file", $sftp->message;
+          "$filename.asc" ) #once complete, you rename it, for pickup
+          or $self->die("Cannot RENAME file", $sftp->error);
         $self->is_success(1);
         $self->server_response( $sftp->message );
     }
@@ -1416,7 +1408,7 @@ sub create_batch {
         my $response = {};
         if ( $status_code =~ /^200/ ) {
             if ( ! eval { $response = XMLin($page); } ) {
-                die "XML PARSING FAILURE: $@";
+                $self->_die("XML PARSING FAILURE: $@");
             }
             elsif ( exists( $response->{'response'} )
                 && $response->{'response'} == 1 )
@@ -1432,7 +1424,7 @@ sub create_batch {
             }
         }
         else {
-            die "CONNECTION FAILURE: $status_code";
+            $self->_die("CONNECTION FAILURE: $status_code");
         }
         $self->{_response} = $response;
 
@@ -1561,6 +1553,111 @@ sub send_rfr {
     }
 }
 
+sub _sftp_connect {
+    my ($self,$args,$dir) = @_;
+    $self->_die("Missing ftp_username") if ! $args->{'ftp_username'};
+    $self->_die("Missing ftp_password") if ! $args->{'ftp_password'};
+    require Net::SFTP::Foreign;
+    my $sftp = Net::SFTP::Foreign->new(
+        $self->server(),
+        timeout  => $args->{'ftp_timeout'} || 90,
+        stderr_discard => 1,
+        user     => $args->{'ftp_username'},
+        password => $args->{'ftp_password'},
+    );
+    $sftp->error and $self->_die("SSH connection failed: " . $sftp->error);
+
+    if ($dir) {
+        $sftp->setcwd($dir)
+        or $self->_die("Cannot change working directory ", $sftp->error);
+    }
+
+    return $sftp;
+}
+
+sub _die {
+    my $self = shift;
+    my $msg = join '', @_;
+    $self->is_success(0);
+    $self->error_message( $msg );
+    die $msg."\n";
+}
+
+=head2 retrieve_batch_list
+
+A new method not directly supported by BOP.
+Get a list of available batch result files.
+
+ my $opts = {
+  ftp_username=> 'fred',
+  ftp_password=> 'pancakes',
+ };
+
+ my $ret = $tx->retrieve_batch( %$opts );
+ my @filelist = @$ret if $tx->is_success;
+
+=cut
+
+sub retrieve_batch_list {
+    my ($self, %opts ) = @_;
+
+    $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
+    $self->error_message('');
+
+    local $SCRUBBER=1;
+    $self->_litle_scrubber_init(\%opts);
+
+    my $sftp = $self->_sftp_connect(\%opts,'outbound');
+
+    my $ls = $sftp->ls( wanted => qr/\.asc$/ )
+    or $self->_die("Cannot get directory listing ", $sftp->error);
+
+    my @filenames = map {$_->{'filename'}} @{ $ls };
+    $self->is_success(1);
+    return \@filenames;
+}
+
+=head2 retrieve_batch_delete
+
+A new method not directly supported by BOP.
+Delete a batch from Litle.
+
+ my $opts = {
+  login       => 'testdrive',
+  password    => '123qwe',
+  batch_id    => '001',
+  ftp_username=> 'fred',
+  ftp_password=> 'pancakes',
+ };
+
+ $tx->retrieve_batch_delete( %$opts );
+
+=cut
+
+sub retrieve_batch_delete  {
+    my ( $self, %opts ) = @_;
+
+    $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
+    $self->error_message('');
+
+    local $SCRUBBER=1;
+    $self->_litle_scrubber_init(\%opts);
+
+    $self->_die("Missing batch_id") if !$opts{'batch_id'};
+
+    my $sftp = $self->_sftp_connect(\%opts,'outbound');
+
+    my $filename = $opts{'batch_id'};
+    $sftp->remove( $filename )
+    or $self->_die("Cannot delete $filename: ", $sftp->error);
+
+    $self->is_success(1);
+}
+
 =head2 retrieve_batch
 
 A new method not directly supported by BOP.
@@ -1570,7 +1667,7 @@ Get a batch from Litle.
   login       => 'testdrive',
   password    => '123qwe',
   batch_id    => '001',
-  batch_return=> '',
+  batch_return=> '', # If present, this will be used instead of downloading from Litle
   ftp_username=> 'fred',
   ftp_password=> 'pancakes',
  };
@@ -1584,53 +1681,50 @@ Get a batch from Litle.
 sub retrieve_batch {
     my ( $self, %opts ) = @_;
 
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
+    $self->error_message('');
 
-    croak "Missing filename" if !$opts{'batch_id'};
+    local $SCRUBBER=1;
+    $self->_litle_scrubber_init(\%opts);
+
+    $self->_die("Missing batch_id") if !$opts{'batch_id'};
+
     my $post_data;
     if ( $opts{'batch_return'} ) {
         ## passed in data structure
         $post_data = $opts{'batch_return'};
+        $self->server_request('Data was provided using batch_return option');
     }
     else {
         ## go download a batch
-        require Net::SFTP::Foreign;
-        my $sftp = Net::SFTP::Foreign->new(
-            $self->server(),
-            timeout  => 90,
-            stderr_discard => 1, # disable ftp banner
-            user     => $opts{'ftp_username'},
-            password => $opts{'ftp_password'},
-        );
-        $sftp->error and die "SSH connection failed: " . $sftp->error;
-
-        $sftp->setcwd("outbound")
-          or die "Cannot change working directory ", $sftp->error;
+        my $sftp = $self->_sftp_connect(\%opts,'outbound');
 
         my $filename = $opts{'batch_id'};
+        $self->server_request('SFTP requesting file: '.$filename,1);
         $post_data = $sftp->get_content( $filename )
-          or die "Cannot GET $filename", $sftp->error;
-        $self->is_success(1);
-        warn $post_data if $DEBUG;
+          or $self->_die("Cannot GET $filename", $sftp->error);
     }
+    $self->server_response_dangerous($post_data,1);
+    $self->server_response('Litle scrubber not initialized yet, see server_response_dangerous for a copy of the server response.  Please note it may contain data that is not appropriate to store.',1);
 
     my $response = {};
-    if ( ! eval { $response = XMLin($post_data); } ) {
-        die "XML PARSING FAILURE: $@";
+    if ( ! eval { $response = XMLin($post_data,
+                                ForceArray => [ 'accountUpdateResponse' ],
+                                KeyAttr => '-id',
+                            ); } ) {
+        $self->_die("XML PARSING FAILURE: $@");
     }
     elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
         warn Dumper( $response, $self->{'_post_data'} );
-        $self->error_message( $response->{'message'} );
-        return;
+        $self->_die($response->{'message'} || 'No reason given');
     }
     else {
+        ## update the status
         $self->error_message( $response->{'batchResponse'}->{'message'} );
     }
-
-    $self->server_request( $post_data );
-    $self->server_response( $response );
 
     $self->{_response} = $response;
     my $resp = $response->{'batchResponse'};
@@ -1753,6 +1847,10 @@ sub chargeback_activity_request {
     my $post_data;
 
     $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
+    $self->error_message('');
+
     my %content = $self->content();
 
     local $SCRUBBER=1;
@@ -1761,8 +1859,7 @@ sub chargeback_activity_request {
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
     if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{2})-(\d{2})$/ || $1 > 12 || $2 > 31) {
-        die "Invalid Date Pattern, YYYY-MM-DD required:"
-          . ( $content{'activity_date'} || 'undef');
+        $self->_die("Invalid Date Pattern, YYYY-MM-DD required:" . ( $content{'activity_date'} || 'undef'));
     }
     #
     ## financials only [true,false]
@@ -1824,6 +1921,7 @@ sub chargeback_activity_request {
     } );
 
     my $page = $tiny_response->{'content'};
+    $self->server_request( $post_data );
     $self->server_response( $page );
     my $status_code = $tiny_response->{'status'};
     my %headers = %{$tiny_response->{'headers'}};
@@ -1833,8 +1931,10 @@ sub chargeback_activity_request {
     my $response = {};
     if ( $status_code =~ /^200/ ) {
         ## Failed to parse
-        if ( !eval { $response = XMLin($page); } ) {
-            die "XML PARSING FAILURE: $@, $page";
+        if ( !eval { $response = XMLin($page,
+                                ForceArray => [ 'caseActivity' ],
+                                ); } ) {
+            $self->_die("XML PARSING FAILURE: $@, $page");
         }    ## well-formed failure message
         elsif ( exists( $response->{'response'} )
             && $response->{'response'} == 1 )
@@ -1847,7 +1947,6 @@ sub chargeback_activity_request {
         else {
             $self->error_message(
                 $response->{'litleChargebackActivitiesResponse'}->{'message'} );
-            $self->is_success(1);
         }
     }
     else {
@@ -1856,14 +1955,11 @@ sub chargeback_activity_request {
         if ( $status_code =~ /^(?:900|599)/ ) {
             $status_code .= ' - verify Litle has whitelisted your IP';
         }
-        die "CONNECTION FAILURE: $status_code";
+        $self->_die("CONNECTION FAILURE: $status_code");
     }
     $self->{_response} = $response;
 
     my @response_list;
-    if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
-        $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
-    }
     require Business::OnlinePayment::Litle::ChargebackActivityResponse;
     foreach my $case ( @{ $response->{caseActivity} } ) {
        push @response_list,
@@ -1871,6 +1967,7 @@ sub chargeback_activity_request {
     }
 
     warn Dumper($response) if $DEBUG;
+    $self->is_success(1);
     return \@response_list;
 }
 
