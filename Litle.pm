@@ -348,9 +348,6 @@ sub test_transaction {
 sub map_fields {
     my ( $self, $content ) = @_;
 
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
-
     my $action  = lc( $content->{'action'} );
     my %actions = (
         'normal authorization' => 'sale',
@@ -447,9 +444,6 @@ Used internally to guarentee that XML data will conform to the Litle spec.
 sub format_misc_field {
     my ($self, $content, $trunc) = @_;
 
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
-
     if( defined $content->{ $trunc->[0] } ) {
       utf8::upgrade($content->{ $trunc->[0] });
       my $len = length( $content->{ $trunc->[0] } );
@@ -519,9 +513,6 @@ Converts the BOP data to something that Litle can use.
 
 sub map_request {
     my ( $self, $content ) = @_;
-
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     $self->map_fields($content);
 
@@ -860,12 +851,10 @@ sub map_request {
 sub submit {
     my ($self) = @_;
 
-    $self->is_success(0);
+    local $SCRUBBER=1;
+    $self->_litle_init;
 
     my %content = $self->content();
-
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     warn 'Pre processing: '.Dumper(\%content) if $DEBUG;
     my $req     = $self->map_request( \%content );
@@ -1076,11 +1065,10 @@ sub chargeback_replace_support_doc {
 sub _litle_support_doc {
     my ( $self, $action ) = @_;
 
-    $self->is_success(0);
-    my %content = $self->content();
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init;
+
+    my %content = $self->content();
 
     my $requiredargs = ['case_id','filename','merchantid'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
@@ -1180,11 +1168,10 @@ Litle does not currently send any file attributes.  However the hash is built fo
 sub chargeback_list_support_docs {
     my ( $self ) = @_;
 
-    $self->is_success(0);
+    local $SCRUBBER=1;
+    $self->_litle_init;
 
     my %content = $self->content();
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     croak "Missing arg case_id" unless $content{'case_id'};
     croak "Missing arg merchantid" unless $content{'merchantid'};
@@ -1307,12 +1294,8 @@ Send the current batch to Litle.
 sub create_batch {
     my ( $self, %opts ) = @_;
 
-    $self->is_success(0);
-    $self->server_request('');
-    $self->server_response('');
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init(\%opts);
+    $self->_litle_init(\%opts);
 
     if ( ! defined $self->{'batch_entries'} || scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
         $self->error_message('Cannot create an empty batch');
@@ -1355,20 +1338,18 @@ sub create_batch {
         merchantId        => $opts{'merchantid'},
     );
     foreach my $entry ( @{ $self->{'batch_entries'} } ) {
-        $self->content( %{$entry} );
         $self->_litle_scrubber_add_card($entry->{'card_number'});
-        my %content = $self->content;
-        my $req     = $self->map_request( \%content );
+        my $req     = $self->map_request( $entry );
         $writer->startTag(
-            $content{'TransactionType'},
-            id          => $content{'invoice_number'},
-            reportGroup => $content{'report_group'} || 'BOP',
-            customerId  => $content{'customer_id'} || 1,
+            $entry->{'TransactionType'},
+            id          => $entry->{'invoice_number'},
+            reportGroup => $entry->{'report_group'} || 'BOP',
+            customerId  => $entry->{'customer_id'} || 1,
         );
         foreach ( keys( %{$req} ) ) {
             $self->_xmlwrite( $writer, $_, $req->{$_} );
         }
-        $writer->endTag( $content{'TransactionType'} );
+        $writer->endTag( $entry->{'TransactionType'} );
         ## need to also handle the action tag here, and custid info
     }
     $writer->endTag("batchRequest");
@@ -1462,12 +1443,11 @@ A new method not directly supported by BOP.
 
 sub send_rfr {
     my ( $self, $args ) = @_;
-    my $post_data;
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init($args);
 
-    $self->is_success(0);
+    my $post_data;
     my $writer = new XML::Writer(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
@@ -1601,13 +1581,8 @@ Get a list of available batch result files.
 sub retrieve_batch_list {
     my ($self, %opts ) = @_;
 
-    $self->is_success(0);
-    $self->server_request('');
-    $self->server_response('');
-    $self->error_message('');
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init(\%opts);
+    $self->_litle_init(\%opts);
 
     my $sftp = $self->_sftp_connect(\%opts,'outbound');
 
@@ -1639,13 +1614,8 @@ Delete a batch from Litle.
 sub retrieve_batch_delete  {
     my ( $self, %opts ) = @_;
 
-    $self->is_success(0);
-    $self->server_request('');
-    $self->server_response('');
-    $self->error_message('');
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init(\%opts);
+    $self->_litle_init(\%opts);
 
     $self->_die("Missing batch_id") if !$opts{'batch_id'};
 
@@ -1681,13 +1651,8 @@ Get a batch from Litle.
 sub retrieve_batch {
     my ( $self, %opts ) = @_;
 
-    $self->is_success(0);
-    $self->server_request('');
-    $self->server_response('');
-    $self->error_message('');
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init(\%opts);
+    $self->_litle_init(\%opts);
 
     $self->_die("Missing batch_id") if !$opts{'batch_id'};
 
@@ -1816,16 +1781,26 @@ sub _litle_scrubber_add_card {
     scrubber_add_scrubber({$cc=>$del});
 }
 
-sub _litle_scrubber_init {
+sub _litle_init {
     my ( $self, $opts ) = @_;
+
+    # initialize/reset the reporting methods
+    $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
+    $self->error_message('');
+
+    # some calls are passed via the content method, others are direct arguments... this way we cover both
     my %content = $self->content();
-    if ($opts) { %content = %$opts; }
-    scrubber_init({
-        quotemeta($content{'password'}||'')=>'DELETED',
-        quotemeta($content{'ftp_password'}||'')=>'DELETED',
-        ($content{'cvv2'} ? '(?<=[^\d])'.quotemeta($content{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
-        });
-    $self->_litle_scrubber_add_card($content{'card_number'});
+    foreach my $ptr (\%content,$opts) {
+        next if ! $ptr;
+        scrubber_init({
+            quotemeta($ptr->{'password'}||'')=>'DELETED',
+            quotemeta($ptr->{'ftp_password'}||'')=>'DELETED',
+            ($ptr->{'cvv2'} ? '(?<=[^\d])'.quotemeta($ptr->{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
+            });
+        $self->_litle_scrubber_add_card($ptr->{'card_number'});
+    }
 }
 
 =head2 chargeback_activity_request
@@ -1844,17 +1819,12 @@ Return a arrayref that contains a list of Business::OnlinePayment::Litle::Charge
 
 sub chargeback_activity_request {
     my ( $self ) = @_;
-    my $post_data;
-
-    $self->is_success(0);
-    $self->server_request('');
-    $self->server_response('');
-    $self->error_message('');
-
-    my %content = $self->content();
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init;
+
+    my $post_data;
+    my %content = $self->content();
 
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
@@ -1994,13 +1964,12 @@ Return a arrayref that contains a list of Business::OnlinePayment::Litle::Charge
 
 sub chargeback_update_request {
     my ( $self ) = @_;
-    my $post_data;
-
-    $self->is_success(0);
-    my %content = $self->content();
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init;
+
+    my $post_data;
+    my %content = $self->content();
 
     foreach my $key (qw(case_id merchant_activity_id activity )) {
         ## case_id
