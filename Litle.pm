@@ -21,7 +21,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.936';
+$VERSION = '0.937';
 
 =head1 NAME
 
@@ -1012,7 +1012,7 @@ Retrieve a currently uploaded file
 sub chargeback_retrieve_support_doc {
     my ( $self ) = @_;
     $self->_litle_support_doc('RETRIEVE');
-    if ($self->is_success) { $self->{'fileContent'} = $self->{'_response'}; } else { $self->{'fileContent'} = undef; }
+    if ($self->is_success) { $self->{'fileContent'} = $self->{'server_response_dangerous'}; } else { $self->{'fileContent'} = undef; }
 }
 
 =head2 chargeback_delete_support_doc
