@@ -109,9 +109,43 @@ tx_check(
         approved_amount => undef,
         is_duplicate => 1,
     );
-    $tx_dupe->unmock('https_post');
 }
-
+{
+    my $tx_token = Business::OnlinePayment->new("Litle", @opts);
+    $tx_token = Test::MockObject::Extends->new($tx_token);
+    $tx_token->mock('https_post', sub {
+        return ("<litleOnlineResponse version='8.17' response='0' message='Valid Format' xmlns='http://www.litle.com/schema'>
+    <saleResponse id='1234' reportGroup='BOP' customerId='tfb' duplicate='true'>
+        <litleTxnId>898289134615584000</litleTxnId>
+        <orderId>1234</orderId>
+        <response>000</response>
+        <responseTime>2013-04-23T14:41:51</responseTime>
+        <message>Approved</message>
+        <authCode>65099</authCode>
+        <tokenResponse>
+            <litleToken>99999</litleToken>
+            <tokenResponseCode>999</tokenResponseCode>
+            <tokenMessage>Wrong!</tokenMessage>
+        </tokenResponse>
+    </saleResponse>
+</litleOnlineResponse>", '200', ());
+    });
+    %content = %orig_content;
+    $content{'action'} = 'Normal Authorization';
+    $tx_token->content(%content);
+    tx_check(
+        $tx_token,
+        desc          => "Normal Auth",
+        is_success    => '1',
+        result_code   => '000',
+        error_message => 'Approved',
+        approved_amount => undef,
+        is_duplicate => 1,
+        card_token => '99999',
+        card_token_response => '999',
+        card_token_message => 'Wrong!'
+    );
+}
 
 $orig_content{'action'} = 'Normal Authorization';
 %content = %orig_content;
@@ -171,6 +205,11 @@ sub tx_check {
     }
     if( defined $o{is_duplicate} ){
         is( $tx->is_duplicate, $o{is_duplicate}, "is_duplicate() / " . $o{is_duplicate} );
+    }
+    foreach my $field (qw/card_token card_token_response card_token_message/) {
+        if( defined $o{$field} ) {
+            is( $tx->$field, $o{$field}, "$field() / " . $o{$field} );
+        }
     }
     if( $o{approved_amount} ){
         is( $tx->{_response}->{approvedAmount}, $o{approved_amount}, "approved_amount() / Partial Approval Amount" );
