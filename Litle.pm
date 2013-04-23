@@ -84,6 +84,10 @@ Returns the response error code.
 
 Returns the response error description text.
 
+=head2 is_duplicate
+
+Returns 1 if the request was a duplicate, 0 otherwise
+
 =head2 server_request
 
 Returns the complete request that was sent to the server.  The request has been stripped of card_num, cvv2, and password.  So it should be safe to log.
@@ -242,7 +246,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL phoenixTxnId
+          verify_SSL phoenixTxnId is_duplicate
           )
     );
 
@@ -959,6 +963,12 @@ sub submit {
     }
 
     #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
+    if( defined $resp->{'duplicate'} && $resp->{'duplicate'} eq 'true' ) {
+        $self->is_duplicate(1);
+    }
+    else {
+        $self->is_duplicate(0);
+    }
 
     if( $resp->{enhancedAuthResponse}
         && $resp->{enhancedAuthResponse}->{affluence}
