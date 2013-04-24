@@ -84,6 +84,22 @@ Returns the response error code.
 
 Returns the response error description text.
 
+=head2 is_duplicate
+
+Returns 1 if the request was a duplicate, 0 otherwise
+
+=head2 card_token
+
+Return the card token if present.  You will need to have the card tokenization feature enabled for this feature to make sense.
+
+=head2 card_token_response
+
+Return the Litle specific response code for the tokenization request
+
+=head2 card_token_message
+
+Return the Litle human readable response to the tokenization request
+
 =head2 server_request
 
 Returns the complete request that was sent to the server.  The request has been stripped of card_num, cvv2, and password.  So it should be safe to log.
@@ -202,6 +218,21 @@ In order to run the provided test suite, you will first need to apply and get yo
 
 Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
 
+=head1 CUSTOM LOG SCRUBBING FUNCTION
+
+The default card scrubbing leaves the first 6 and last 4 of the card number for logging.
+
+If you want to provide your own card number scrubber code ref, pass in the default_Scrubber option to the constructor.  It takes the card
+number as the first parameter and should return the masked version.
+
+  my $tx = Business::OnlinePayment->new(
+     "Litle",
+     default_Origin => 'NEW',
+     default_Scrubber => sub {
+         return substr($_[0],-4,4);
+     }
+  );
+
 =head1 FUNCTIONS
 
 =head2 _info
@@ -242,7 +273,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL phoenixTxnId
+          verify_SSL phoenixTxnId is_duplicate card_token card_token_response card_token_message
           )
     );
 
@@ -259,6 +290,17 @@ sub set_defaults {
         $key =~ /^default_(\w*)$/ or next;
         $_defaults{$1} = $opts{$key};
         delete $opts{$key};
+    }
+
+    $self->{_scrubber} = \&_default_scrubber;
+    if( defined $_defaults{'Scrubber'} ) {
+        my $code = $_defaults{'Scrubber'};
+        if( ref($code) ne 'CODE' ) {
+            warn('default_Scrubber is not a code ref');
+        }
+        else {
+            $self->{_scrubber} = $code;
+        }
     }
 
     $self->api_version('8.1')                   unless $self->api_version;
@@ -959,6 +1001,18 @@ sub submit {
     }
 
     #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
+    if( defined $resp->{'duplicate'} && $resp->{'duplicate'} eq 'true' ) {
+        $self->is_duplicate(1);
+    }
+    else {
+        $self->is_duplicate(0);
+    }
+
+    if( defined $resp->{tokenResponse} ) {
+        $self->card_token($resp->{tokenResponse}->{litleToken});
+        $self->card_token_response($resp->{tokenResponse}->{tokenResponseCode});
+        $self->card_token_message($resp->{tokenResponse}->{tokenMessage});
+    }
 
     if( $resp->{enhancedAuthResponse}
         && $resp->{enhancedAuthResponse}->{affluence}
@@ -1774,11 +1828,17 @@ sub _xmlwrite {
     }
 }
 
+sub _default_scrubber {
+    my $cc = shift;
+    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
+    return $del;
+}
+
 sub _litle_scrubber_add_card {
     my ( $self, $cc ) = @_;
     return if ! $cc;
-    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
-    scrubber_add_scrubber({$cc=>$del});
+    my $scrubber = $self->{_scrubber};
+    scrubber_add_scrubber({$cc=>&{$scrubber}($cc)});
 }
 
 sub _litle_init {

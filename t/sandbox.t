@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 
 use Test::More qw(no_plan);
+use Test::MockObject::Extends;
 
 ## grab info from the ENV
 my $login = $ENV{'BOP_USERNAME'} ? $ENV{'BOP_USERNAME'} : 'TESTMERCHANT';
@@ -81,6 +82,71 @@ tx_check(
 	approved_amount => undef,
 );
 
+{
+    my $tx_dupe = Business::OnlinePayment->new("Litle", @opts);
+    $tx_dupe = Test::MockObject::Extends->new($tx_dupe);
+    $tx_dupe->mock('https_post', sub {
+        return ("<litleOnlineResponse version='8.17' response='0' message='Valid Format' xmlns='http://www.litle.com/schema'>
+    <saleResponse id='1234' reportGroup='BOP' customerId='tfb' duplicate='true'>
+        <litleTxnId>898289134615584000</litleTxnId>
+        <orderId>1234</orderId>
+        <response>000</response>
+        <responseTime>2013-04-23T14:41:51</responseTime>
+        <message>Approved</message>
+        <authCode>65099</authCode>
+    </saleResponse>
+</litleOnlineResponse>", '200', ());
+    });
+    %content = %orig_content;
+    $content{'action'} = 'Normal Authorization';
+    $tx_dupe->content(%content);
+    tx_check(
+        $tx_dupe,
+        desc          => "Normal Auth",
+        is_success    => '1',
+        result_code   => '000',
+        error_message => 'Approved',
+        approved_amount => undef,
+        is_duplicate => 1,
+    );
+}
+{
+    my $tx_token = Business::OnlinePayment->new("Litle", @opts);
+    $tx_token = Test::MockObject::Extends->new($tx_token);
+    $tx_token->mock('https_post', sub {
+        return ("<litleOnlineResponse version='8.17' response='0' message='Valid Format' xmlns='http://www.litle.com/schema'>
+    <saleResponse id='1234' reportGroup='BOP' customerId='tfb' duplicate='true'>
+        <litleTxnId>898289134615584000</litleTxnId>
+        <orderId>1234</orderId>
+        <response>000</response>
+        <responseTime>2013-04-23T14:41:51</responseTime>
+        <message>Approved</message>
+        <authCode>65099</authCode>
+        <tokenResponse>
+            <litleToken>99999</litleToken>
+            <tokenResponseCode>999</tokenResponseCode>
+            <tokenMessage>Wrong!</tokenMessage>
+        </tokenResponse>
+    </saleResponse>
+</litleOnlineResponse>", '200', ());
+    });
+    %content = %orig_content;
+    $content{'action'} = 'Normal Authorization';
+    $tx_token->content(%content);
+    tx_check(
+        $tx_token,
+        desc          => "Normal Auth",
+        is_success    => '1',
+        result_code   => '000',
+        error_message => 'Approved',
+        approved_amount => undef,
+        is_duplicate => 1,
+        card_token => '99999',
+        card_token_response => '999',
+        card_token_message => 'Wrong!'
+    );
+}
+
 $orig_content{'action'} = 'Normal Authorization';
 %content = %orig_content;
 $tx->content(%content);
@@ -137,6 +203,14 @@ sub tx_check {
     if( $o{cvv2_response} ){
         is( $tx->cvv2_response, $o{cvv2_response}, "cvv2_response() / CVV2MATCH" );
     }
+    if( defined $o{is_duplicate} ){
+        is( $tx->is_duplicate, $o{is_duplicate}, "is_duplicate() / " . $o{is_duplicate} );
+    }
+    foreach my $field (qw/card_token card_token_response card_token_message/) {
+        if( defined $o{$field} ) {
+            is( $tx->$field, $o{$field}, "$field() / " . $o{$field} );
+        }
+    }
     if( $o{approved_amount} ){
         is( $tx->{_response}->{approvedAmount}, $o{approved_amount}, "approved_amount() / Partial Approval Amount" );
     }
@@ -157,6 +231,7 @@ sub tx_info {
             " auth_info(",     $tx->authorization, ")",
             " avs_code(",      $tx->avs_code,      ")",
             " cvv2_response(", $tx->cvv2_response, ")",
+            " is_duplicate(",  $tx->is_duplicate,  ")",
         )
     );
 }
