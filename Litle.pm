@@ -1,5 +1,6 @@
 package Business::OnlinePayment::Litle;
 
+
 use warnings;
 use strict;
 
@@ -21,7 +22,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.937';
+$VERSION = '0.938';
 
 =head1 NAME
 
@@ -239,7 +240,7 @@ sub set_defaults {
     my %opts = @_;
 
     $self->build_subs(
-        qw( order_number md5 avs_code cvv2_response
+        qw( order_number md5 avs_code cvv2_response card_token
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
           verify_SSL phoenixTxnId
@@ -357,6 +358,7 @@ sub map_fields {
         'credit'               => 'credit',
         'auth reversal'        => 'authReversal',
         'account update'       => 'accountUpdate',
+        'tokenize'             => 'registerTokenRequest',
 
         # AVS ONLY
         # Capture Given
@@ -736,7 +738,15 @@ sub map_request {
 
     my %req;
 
-    if ( $action eq 'sale' ) {
+    if ( $action eq 'registerTokenRequest' ) {
+        croak 'missing card_number' if length($content->{'card_number'} || '') == 0;
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content       => $content,
+            orderId       => 'invoice_number',
+            accountNumber => 'card_number',
+        );
+    }
+    elsif ( $action eq 'sale' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
             content       => $content,
@@ -924,6 +934,9 @@ sub submit {
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
 
     my $response = $self->_parse_xml_response( $page, $status_code );
+
+    $content{'TransactionType'} =~ s/Request$//; # no clue why some of the types have a Request and some do not
+
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
         warn Dumper $response, $self->server_request;
@@ -941,6 +954,7 @@ sub submit {
     ## Set up the data:
     my $resp = $response->{ $content{'TransactionType'} . 'Response' };
     $self->{_response} = $resp;
+    $self->card_token( $resp->{'litleToken'} || $resp->{'tokenResponse'}->{'litleToken'} || '' );
     $self->order_number( $resp->{'litleTxnId'} || '' );
     $self->result_code( $resp->{'response'}    || '' );
     $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
