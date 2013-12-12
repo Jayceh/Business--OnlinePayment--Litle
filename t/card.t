@@ -889,7 +889,7 @@ $data= {
                          'Message' => 'Approved',
                          'Authentication Result' => '',
                          'Card Validation Result' => '',
-                         'AVSResult' => '12'
+                         'AVSResult' => '13'
                        },
                        {
                          'OrderId' => '5',
@@ -920,11 +920,11 @@ $data= {
                        },
                        {
                          'OrderId' => '8',
-                         #'ResponseCode' => '123',
-                         'ResponseCode' => '120',
+                         'ResponseCode' => '123',
+                         #'ResponseCode' => '120',
                          'AuthCode' => '',
-                         #'Message' => 'Call Discover',
-                         'Message' => 'Call Issuer',
+                         'Message' => 'Call Discover',
+                         #'Message' => 'Call Issuer',
                          'Authentication Result' => '',
                          'Card Validation Result' => 'P',
                          'AVSResult' => '34'
@@ -970,7 +970,7 @@ $data= {
                                {
                                  'Response Code' => '000',
                                  'OrderId' => '4',
-                                 'AVS Result' => '12',
+                                 'AVS Result' => '13',
                                  'Message' => 'Approved',
                                  'Authentication Result' => '',
                                  'Auth Code' => '44444',
@@ -1004,10 +1004,12 @@ $data= {
                                  'Card Validation Result' => 'N'
                                },
                                {
-                                 'Response Code' => '120',
+                                 #'Response Code' => '120',
+                                 'Response Code' => '123',
                                  'OrderId' => '8',
                                  'AVS Result' => '34',
-                                 'Message' => 'Call Issuer',
+                                 'Message' => 'Call Discover',
+                                 #'Message' => 'Call Issuer',
                                  'Authentication Result' => '',
                                  'Auth Code' => '',
                                  'Card Validation Result' => 'P'
@@ -1045,7 +1047,7 @@ $data= {
                                      'OrderId' => '4',
                                      'Message' => 'Approved',
                                      'Response' => '000',
-                                     'AVSResult' => '12'
+                                     'AVSResult' => '13'
                                    },
                                    {
                                      'OrderId' => '5',
@@ -1474,9 +1476,11 @@ $data= {
                                   'Card Type' => 'AX'
                                 },
                                 {
-                                  'Response Code' => '120',
+                                  #'Response Code' => '120',
+                                  'Response Code' => '123',
                                   'AVS Response Code' => undef,
-                                  'Message' => 'Call Issuer',
+                                  #'Message' => 'Call Issuer',
+                                  'Message' => 'Call Discover',
                                   'Account Number' => '6011000400000000',
                                   'Approval Code' => 'NA',
                                   'Card Type' => 'DI'
