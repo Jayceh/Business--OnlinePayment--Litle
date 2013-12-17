@@ -342,7 +342,7 @@ sub test_transaction {
         $self->port('443');
         $self->path('/sandbox/communicator/online');
 
-        $self->chargeback_server('services-cert.litle.com'); # no sandbox exists, so fallback to certify
+        $self->chargeback_server('service-postlive.litle.com'); # no sandbox exists, so fallback to certify
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif (lc($testMode) eq 'localhost') {
@@ -365,7 +365,7 @@ sub test_transaction {
         $self->port('443');
         $self->path('/vap/communicator/online');
 
-        $self->chargeback_server('services-cert.litle.com');
+        $self->chargeback_server('service-postlive.litle.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
@@ -376,7 +376,7 @@ sub test_transaction {
         $self->port('443');
         $self->path('/vap/communicator/online');
 
-        $self->chargeback_server('services-cert.litle.com');
+        $self->chargeback_server('service-prelive.litle.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
