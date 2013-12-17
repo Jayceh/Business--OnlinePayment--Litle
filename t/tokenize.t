@@ -97,7 +97,7 @@ SKIP: {
     my $ret = $tx->submit;
     $token_result = $tx->result_code;
     skip "contact litle support to enable tokens",4 if defined $token_result && $token_result == 821;
-    is( $tx->result_code,   '000',   "result_code(): ".($tx->result_code||'').' - '.($tx->error_message||'') );
+    like( $tx->result_code,   qr/^(000|802)$/,   "result_code(): ".($tx->result_code||'').' - '.($tx->error_message||'') );
     skip "transaction did not process (check litle credentials)",3 if ! defined $tx->result_code && $tx->error_message =~ /System Error/;
     like( $tx->order_number, qr/^\w{5,19}/, "order_number(): ".($tx->order_number||'') );
     is( $tx->is_success,    1,    "is_success: 1" );

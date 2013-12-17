@@ -390,7 +390,7 @@ sub map_fields {
 
     $content->{'card_type'} =
          $type_translate->{ cardtype( $content->{'card_number'} ) }
-      || $content->{'type'};
+      || $content->{'type'} if $content->{'card_number'};
 
     if (   $content->{recurring_billing}
         && $content->{recurring_billing} eq 'YES' )
@@ -965,7 +965,7 @@ sub submit {
     ## Set up the data:
     my $resp = $response->{ $content{'TransactionType'} . 'Response' };
     $self->{_response} = $resp;
-    $self->card_token( $resp->{'litleToken'} || $resp->{'tokenResponse'}->{'litleToken'} || '' );
+    $self->card_token( $resp->{'litleToken'} || $resp->{'tokenResponse'}->{'litleToken'} || $content{'card_token'} || '' );
     $self->order_number( $resp->{'litleTxnId'} || '' );
     $self->result_code( $resp->{'response'}    || '' );
     $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
@@ -991,8 +991,10 @@ sub submit {
       $self->get_affluence( $resp->{enhancedAuthResponse}->{affluence} );
     }
     $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
-    if( $self->result_code() eq '010' ) {
-      # Partial approval, if they chose that option
+    if(
+           $self->result_code() eq '010' # Partial approval, if they chose that option
+        || ($self->result_code() eq '802' && $self->card_token) # Card is already a token
+    ) {
       $self->is_success(1);
     }
 
