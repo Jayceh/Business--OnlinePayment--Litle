@@ -1,5 +1,6 @@
 package Business::OnlinePayment::Litle;
 
+
 use warnings;
 use strict;
 
@@ -21,7 +22,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.937';
+$VERSION = '0.938';
 
 =head1 NAME
 
@@ -270,7 +271,7 @@ sub set_defaults {
     my %opts = @_;
 
     $self->build_subs(
-        qw( order_number md5 avs_code cvv2_response
+        qw( order_number md5 avs_code cvv2_response card_token
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
           verify_SSL phoenixTxnId is_duplicate card_token card_token_response card_token_message
@@ -356,11 +357,22 @@ sub test_transaction {
         $self->chargeback_server('localhost');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
+    } elsif (lc($testMode) =~ /(?:cert|postlive)/) {
+    $self->{'test_transaction'} = $testMode;
+        $self->verify_SSL(0);
+
+        $self->server('postlive.litle.com');
+        $self->port('443');
+        $self->path('/vap/communicator/online');
+
+        $self->chargeback_server('services-cert.litle.com');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
     $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
-        $self->server('cert.litle.com');
+        $self->server('prelive.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
 
@@ -399,6 +411,7 @@ sub map_fields {
         'credit'               => 'credit',
         'auth reversal'        => 'authReversal',
         'account update'       => 'accountUpdate',
+        'tokenize'             => 'registerTokenRequest',
 
         # AVS ONLY
         # Capture Given
@@ -419,7 +432,7 @@ sub map_fields {
 
     $content->{'card_type'} =
          $type_translate->{ cardtype( $content->{'card_number'} ) }
-      || $content->{'type'};
+      || $content->{'type'} if $content->{'card_number'};
 
     if (   $content->{recurring_billing}
         && $content->{recurring_billing} eq 'YES' )
@@ -778,7 +791,15 @@ sub map_request {
 
     my %req;
 
-    if ( $action eq 'sale' ) {
+    if ( $action eq 'registerTokenRequest' ) {
+        croak 'missing card_number' if length($content->{'card_number'} || '') == 0;
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content       => $content,
+            orderId       => 'invoice_number',
+            accountNumber => 'card_number',
+        );
+    }
+    elsif ( $action eq 'sale' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
             content       => $content,
@@ -966,9 +987,12 @@ sub submit {
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
 
     my $response = $self->_parse_xml_response( $page, $status_code );
+
+    $content{'TransactionType'} =~ s/Request$//; # no clue why some of the types have a Request and some do not
+
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
-        warn Dumper $response, $self->server_request;
+        warn Dumper 'https://'.$self->server.':'.$self->port.$self->path,$response, $self->server_request;
         $self->error_message( $response->{'message'} );
         return;
     } else {
@@ -983,6 +1007,7 @@ sub submit {
     ## Set up the data:
     my $resp = $response->{ $content{'TransactionType'} . 'Response' };
     $self->{_response} = $resp;
+    $self->card_token( $resp->{'litleToken'} || $resp->{'tokenResponse'}->{'litleToken'} || $content{'card_token'} || '' );
     $self->order_number( $resp->{'litleTxnId'} || '' );
     $self->result_code( $resp->{'response'}    || '' );
     $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
@@ -1020,8 +1045,10 @@ sub submit {
       $self->get_affluence( $resp->{enhancedAuthResponse}->{affluence} );
     }
     $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
-    if( $self->result_code() eq '010' ) {
-      # Partial approval, if they chose that option
+    if(
+           $self->result_code() eq '010' # Partial approval, if they chose that option
+        || ($self->result_code() eq '802' && $self->card_token) # Card is already a token
+    ) {
       $self->is_success(1);
     }
 
