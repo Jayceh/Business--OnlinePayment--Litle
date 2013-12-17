@@ -315,11 +315,22 @@ sub test_transaction {
         $self->chargeback_server('localhost');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
+    } elsif (lc($testMode) =~ /(?:cert|postlive)/) {
+    $self->{'test_transaction'} = $testMode;
+        $self->verify_SSL(0);
+
+        $self->server('postlive.litle.com');
+        $self->port('443');
+        $self->path('/vap/communicator/online');
+
+        $self->chargeback_server('services-cert.litle.com');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
     $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
-        $self->server('cert.litle.com');
+        $self->server('prelive.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
 
@@ -939,7 +950,7 @@ sub submit {
 
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
-        warn Dumper $response, $self->server_request;
+        warn Dumper 'https://'.$self->server.':'.$self->port.$self->path,$response, $self->server_request;
         $self->error_message( $response->{'message'} );
         return;
     } else {
