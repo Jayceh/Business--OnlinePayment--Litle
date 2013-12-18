@@ -22,7 +22,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.938';
+$VERSION = '0.939';
 
 =head1 NAME
 
@@ -357,18 +357,7 @@ sub test_transaction {
         $self->chargeback_server('localhost');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
-    } elsif (lc($testMode) =~ /(?:cert|postlive)/) {
-    $self->{'test_transaction'} = $testMode;
-        $self->verify_SSL(0);
-
-        $self->server('postlive.litle.com');
-        $self->port('443');
-        $self->path('/vap/communicator/online');
-
-        $self->chargeback_server('service-postlive.litle.com');
-        $self->chargeback_port('443');
-        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
-    } elsif ($testMode) {
+    } elsif (lc($testMode) eq 'prelive') {
     $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
@@ -377,6 +366,17 @@ sub test_transaction {
         $self->path('/vap/communicator/online');
 
         $self->chargeback_server('service-prelive.litle.com');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
+    } elsif ($testMode) {
+    $self->{'test_transaction'} = $testMode;
+        $self->verify_SSL(0);
+
+        $self->server('postlive.litle.com');
+        $self->port('443');
+        $self->path('/vap/communicator/online');
+
+        $self->chargeback_server('service-postlive.litle.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
