@@ -12,6 +12,7 @@ WriteMakefile(
       : ()),
     PL_FILES            => {},
     PREREQ_PM => {
+        'Test::MockObject::Extends' => 0,
         'Test::More' => 0,
         'Business::OnlinePayment'        => 0,
         'Business::OnlinePayment::HTTPS' => 0,

@@ -1,5 +1,6 @@
 package Business::OnlinePayment::Litle;
 
+
 use warnings;
 use strict;
 
@@ -21,7 +22,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.935';
+$VERSION = '0.939';
 
 =head1 NAME
 
@@ -29,7 +30,7 @@ Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
 
 =head1 VERSION
 
-Version 0.934
+Version 0.936
 
 =cut
 
@@ -83,6 +84,22 @@ Returns the response error code.
 =head2 error_message
 
 Returns the response error description text.
+
+=head2 is_duplicate
+
+Returns 1 if the request was a duplicate, 0 otherwise
+
+=head2 card_token
+
+Return the card token if present.  You will need to have the card tokenization feature enabled for this feature to make sense.
+
+=head2 card_token_response
+
+Return the Litle specific response code for the tokenization request
+
+=head2 card_token_message
+
+Return the Litle human readable response to the tokenization request
 
 =head2 server_request
 
@@ -202,6 +219,21 @@ In order to run the provided test suite, you will first need to apply and get yo
 
 Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
 
+=head1 CUSTOM LOG SCRUBBING FUNCTION
+
+The default card scrubbing leaves the first 6 and last 4 of the card number for logging.
+
+If you want to provide your own card number scrubber code ref, pass in the default_Scrubber option to the constructor.  It takes the card
+number as the first parameter and should return the masked version.
+
+  my $tx = Business::OnlinePayment->new(
+     "Litle",
+     default_Origin => 'NEW',
+     default_Scrubber => sub {
+         return substr($_[0],-4,4);
+     }
+  );
+
 =head1 FUNCTIONS
 
 =head2 _info
@@ -239,10 +271,10 @@ sub set_defaults {
     my %opts = @_;
 
     $self->build_subs(
-        qw( order_number md5 avs_code cvv2_response
+        qw( order_number md5 avs_code cvv2_response card_token
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL phoenixTxnId
+          verify_SSL phoenixTxnId is_duplicate card_token card_token_response card_token_message
           )
     );
 
@@ -259,6 +291,17 @@ sub set_defaults {
         $key =~ /^default_(\w*)$/ or next;
         $_defaults{$1} = $opts{$key};
         delete $opts{$key};
+    }
+
+    $self->{_scrubber} = \&_default_scrubber;
+    if( defined $_defaults{'Scrubber'} ) {
+        my $code = $_defaults{'Scrubber'};
+        if( ref($code) ne 'CODE' ) {
+            warn('default_Scrubber is not a code ref');
+        }
+        else {
+            $self->{_scrubber} = $code;
+        }
     }
 
     $self->api_version('8.1')                   unless $self->api_version;
@@ -299,7 +342,7 @@ sub test_transaction {
         $self->port('443');
         $self->path('/sandbox/communicator/online');
 
-        $self->chargeback_server('services.cert.litle.com'); # no sandbox exists, so fallback to certify
+        $self->chargeback_server('service-postlive.litle.com'); # no sandbox exists, so fallback to certify
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif (lc($testMode) eq 'localhost') {
@@ -314,15 +357,26 @@ sub test_transaction {
         $self->chargeback_server('localhost');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
+    } elsif (lc($testMode) eq 'prelive') {
+    $self->{'test_transaction'} = $testMode;
+        $self->verify_SSL(0);
+
+        $self->server('prelive.litle.com');
+        $self->port('443');
+        $self->path('/vap/communicator/online');
+
+        $self->chargeback_server('service-prelive.litle.com');
+        $self->chargeback_port('443');
+        $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
     $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
-        $self->server('cert.litle.com');
+        $self->server('postlive.litle.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
 
-        $self->chargeback_server('services.cert.litle.com');
+        $self->chargeback_server('service-postlive.litle.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
@@ -348,9 +402,6 @@ sub test_transaction {
 sub map_fields {
     my ( $self, $content ) = @_;
 
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
-
     my $action  = lc( $content->{'action'} );
     my %actions = (
         'normal authorization' => 'sale',
@@ -360,6 +411,7 @@ sub map_fields {
         'credit'               => 'credit',
         'auth reversal'        => 'authReversal',
         'account update'       => 'accountUpdate',
+        'tokenize'             => 'registerTokenRequest',
 
         # AVS ONLY
         # Capture Given
@@ -380,7 +432,7 @@ sub map_fields {
 
     $content->{'card_type'} =
          $type_translate->{ cardtype( $content->{'card_number'} ) }
-      || $content->{'type'};
+      || $content->{'type'} if $content->{'card_number'};
 
     if (   $content->{recurring_billing}
         && $content->{recurring_billing} eq 'YES' )
@@ -446,9 +498,6 @@ Used internally to guarentee that XML data will conform to the Litle spec.
 
 sub format_misc_field {
     my ($self, $content, $trunc) = @_;
-
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     if( defined $content->{ $trunc->[0] } ) {
       utf8::upgrade($content->{ $trunc->[0] });
@@ -519,9 +568,6 @@ Converts the BOP data to something that Litle can use.
 
 sub map_request {
     my ( $self, $content ) = @_;
-
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     $self->map_fields($content);
 
@@ -745,7 +791,15 @@ sub map_request {
 
     my %req;
 
-    if ( $action eq 'sale' ) {
+    if ( $action eq 'registerTokenRequest' ) {
+        croak 'missing card_number' if length($content->{'card_number'} || '') == 0;
+        tie %req, 'Tie::IxHash', $self->_revmap_fields(
+            content       => $content,
+            orderId       => 'invoice_number',
+            accountNumber => 'card_number',
+        );
+    }
+    elsif ( $action eq 'sale' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
             content       => $content,
@@ -860,12 +914,10 @@ sub map_request {
 sub submit {
     my ($self) = @_;
 
-    $self->is_success(0);
+    local $SCRUBBER=1;
+    $self->_litle_init;
 
     my %content = $self->content();
-
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     warn 'Pre processing: '.Dumper(\%content) if $DEBUG;
     my $req     = $self->map_request( \%content );
@@ -935,9 +987,12 @@ sub submit {
     warn Dumper $self->server_response, $status_code, \%headers if $DEBUG;
 
     my $response = $self->_parse_xml_response( $page, $status_code );
+
+    $content{'TransactionType'} =~ s/Request$//; # no clue why some of the types have a Request and some do not
+
     if ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
-        warn Dumper $response, $self->server_request;
+        warn Dumper 'https://'.$self->server.':'.$self->port.$self->path,$response, $self->server_request;
         $self->error_message( $response->{'message'} );
         return;
     } else {
@@ -952,6 +1007,7 @@ sub submit {
     ## Set up the data:
     my $resp = $response->{ $content{'TransactionType'} . 'Response' };
     $self->{_response} = $resp;
+    $self->card_token( $resp->{'litleToken'} || $resp->{'tokenResponse'}->{'litleToken'} || $content{'card_token'} || '' );
     $self->order_number( $resp->{'litleTxnId'} || '' );
     $self->result_code( $resp->{'response'}    || '' );
     $resp->{'authCode'} =~ s/\D//g if $resp->{'authCode'};
@@ -970,6 +1026,18 @@ sub submit {
     }
 
     #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
+    if( defined $resp->{'duplicate'} && $resp->{'duplicate'} eq 'true' ) {
+        $self->is_duplicate(1);
+    }
+    else {
+        $self->is_duplicate(0);
+    }
+
+    if( defined $resp->{tokenResponse} ) {
+        $self->card_token($resp->{tokenResponse}->{litleToken});
+        $self->card_token_response($resp->{tokenResponse}->{tokenResponseCode});
+        $self->card_token_message($resp->{tokenResponse}->{tokenMessage});
+    }
 
     if( $resp->{enhancedAuthResponse}
         && $resp->{enhancedAuthResponse}->{affluence}
@@ -977,8 +1045,10 @@ sub submit {
       $self->get_affluence( $resp->{enhancedAuthResponse}->{affluence} );
     }
     $self->is_success( $self->result_code() eq '000' ? 1 : 0 );
-    if( $self->result_code() eq '010' ) {
-      # Partial approval, if they chose that option
+    if(
+           $self->result_code() eq '010' # Partial approval, if they chose that option
+        || ($self->result_code() eq '802' && $self->card_token) # Card is already a token
+    ) {
       $self->is_success(1);
     }
 
@@ -1023,7 +1093,7 @@ Retrieve a currently uploaded file
 sub chargeback_retrieve_support_doc {
     my ( $self ) = @_;
     $self->_litle_support_doc('RETRIEVE');
-    if ($self->is_success) { $self->{'fileContent'} = $self->{'_response'}; } else { $self->{'fileContent'} = undef; }
+    if ($self->is_success) { $self->{'fileContent'} = $self->{'server_response_dangerous'}; } else { $self->{'fileContent'} = undef; }
 }
 
 =head2 chargeback_delete_support_doc
@@ -1076,11 +1146,10 @@ sub chargeback_replace_support_doc {
 sub _litle_support_doc {
     my ( $self, $action ) = @_;
 
-    $self->is_success(0);
-    my %content = $self->content();
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init;
+
+    my %content = $self->content();
 
     my $requiredargs = ['case_id','filename','merchantid'];
     if ($action =~ /(?:UPLOAD|REPLACE)/) { push @$requiredargs, 'filecontent', 'mimetype'; }
@@ -1180,11 +1249,10 @@ Litle does not currently send any file attributes.  However the hash is built fo
 sub chargeback_list_support_docs {
     my ( $self ) = @_;
 
-    $self->is_success(0);
+    local $SCRUBBER=1;
+    $self->_litle_init;
 
     my %content = $self->content();
-    local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
 
     croak "Missing arg case_id" unless $content{'case_id'};
     croak "Missing arg merchantid" unless $content{'merchantid'};
@@ -1284,9 +1352,9 @@ sub add_item {
 A new method not directly supported by BOP.
 Send the current batch to Litle.
 
- $tx->add_item( $item );
- $tx->add_item( $item );
- $tx->add_item( $item );
+ $tx->add_item( $item1 );
+ $tx->add_item( $item2 );
+ $tx->add_item( $item3 );
 
  my $opts = {
   login       => 'testdrive',
@@ -1307,12 +1375,8 @@ Send the current batch to Litle.
 sub create_batch {
     my ( $self, %opts ) = @_;
 
-    $self->is_success(0);
-    $self->server_request('');
-    $self->server_response('');
-
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init(\%opts);
+    $self->_litle_init(\%opts);
 
     if ( ! defined $self->{'batch_entries'} || scalar( @{ $self->{'batch_entries'} } ) < 1 ) {
         $self->error_message('Cannot create an empty batch');
@@ -1355,20 +1419,18 @@ sub create_batch {
         merchantId        => $opts{'merchantid'},
     );
     foreach my $entry ( @{ $self->{'batch_entries'} } ) {
-        $self->content( %{$entry} );
         $self->_litle_scrubber_add_card($entry->{'card_number'});
-        my %content = $self->content;
-        my $req     = $self->map_request( \%content );
+        my $req     = $self->map_request( $entry );
         $writer->startTag(
-            $content{'TransactionType'},
-            id          => $content{'invoice_number'},
-            reportGroup => $content{'report_group'} || 'BOP',
-            customerId  => $content{'customer_id'} || 1,
+            $entry->{'TransactionType'},
+            id          => $entry->{'invoice_number'},
+            reportGroup => $entry->{'report_group'} || 'BOP',
+            customerId  => $entry->{'customer_id'} || 1,
         );
         foreach ( keys( %{$req} ) ) {
             $self->_xmlwrite( $writer, $_, $req->{$_} );
         }
-        $writer->endTag( $content{'TransactionType'} );
+        $writer->endTag( $entry->{'TransactionType'} );
         ## need to also handle the action tag here, and custid info
     }
     $writer->endTag("batchRequest");
@@ -1381,27 +1443,18 @@ sub create_batch {
 
     #----- Send it
     if ( $opts{'method'} && $opts{'method'} eq 'sftp' ) {    #FTP
-        require Net::SFTP::Foreign;
-        my $sftp = Net::SFTP::Foreign->new(
-            $self->server(),
-            user     => $opts{'ftp_username'},
-            password => $opts{'ftp_password'},
-        );
-        $sftp->error and die "SSH connection failed: " . $sftp->error . "\n";
+        my $sftp = $self->_sftp_connect(\%opts,'inbound');
 
-        $sftp->setcwd("inbound")
-          or die "Cannot change working directory ", $sftp->error;
         ## save the file out, can't put directly from var, and is multibyte, so issues from filehandle
-
         my $filename = $opts{'batch_id'} || $opts{'login'} . "_" . time;
         my $io = IO::String->new($post_data);
         tie *IO, 'IO::String';
-         
+
         $sftp->put( $io, "$filename.prg" )
-          or die "Cannot PUT $filename", $sftp->error;
+          or $self->_die("Cannot PUT $filename", $sftp->error);
         $sftp->rename( "$filename.prg",
-            "$filename.asc" ) #once complete, you rename it, for pickup
-          or die "Cannot RENAME file", $sftp->message;
+          "$filename.asc" ) #once complete, you rename it, for pickup
+          or $self->die("Cannot RENAME file", $sftp->error);
         $self->is_success(1);
         $self->server_response( $sftp->message );
     }
@@ -1417,7 +1470,7 @@ sub create_batch {
         my $response = {};
         if ( $status_code =~ /^200/ ) {
             if ( ! eval { $response = XMLin($page); } ) {
-                die "XML PARSING FAILURE: $@";
+                $self->_die("XML PARSING FAILURE: $@");
             }
             elsif ( exists( $response->{'response'} )
                 && $response->{'response'} == 1 )
@@ -1433,7 +1486,7 @@ sub create_batch {
             }
         }
         else {
-            die "CONNECTION FAILURE: $status_code";
+            $self->_die("CONNECTION FAILURE: $status_code");
         }
         $self->{_response} = $response;
 
@@ -1471,12 +1524,11 @@ A new method not directly supported by BOP.
 
 sub send_rfr {
     my ( $self, $args ) = @_;
-    my $post_data;
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init($args);
 
-    $self->is_success(0);
+    my $post_data;
     my $writer = new XML::Writer(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
@@ -1562,6 +1614,101 @@ sub send_rfr {
     }
 }
 
+sub _sftp_connect {
+    my ($self,$args,$dir) = @_;
+    $self->_die("Missing ftp_username") if ! $args->{'ftp_username'};
+    $self->_die("Missing ftp_password") if ! $args->{'ftp_password'};
+    require Net::SFTP::Foreign;
+    my $sftp = Net::SFTP::Foreign->new(
+        $self->server(),
+        timeout  => $args->{'ftp_timeout'} || 90,
+        stderr_discard => 1,
+        user     => $args->{'ftp_username'},
+        password => $args->{'ftp_password'},
+    );
+    $sftp->error and $self->_die("SSH connection failed: " . $sftp->error);
+
+    if ($dir) {
+        $sftp->setcwd($dir)
+        or $self->_die("Cannot change working directory ", $sftp->error);
+    }
+
+    return $sftp;
+}
+
+sub _die {
+    my $self = shift;
+    my $msg = join '', @_;
+    $self->is_success(0);
+    $self->error_message( $msg );
+    die $msg."\n";
+}
+
+=head2 retrieve_batch_list
+
+A new method not directly supported by BOP.
+Get a list of available batch result files.
+
+ my $opts = {
+  ftp_username=> 'fred',
+  ftp_password=> 'pancakes',
+ };
+
+ my $ret = $tx->retrieve_batch( %$opts );
+ my @filelist = @$ret if $tx->is_success;
+
+=cut
+
+sub retrieve_batch_list {
+    my ($self, %opts ) = @_;
+
+    local $SCRUBBER=1;
+    $self->_litle_init(\%opts);
+
+    my $sftp = $self->_sftp_connect(\%opts,'outbound');
+
+    my $ls = $sftp->ls( wanted => qr/\.asc$/ )
+    or $self->_die("Cannot get directory listing ", $sftp->error);
+
+    my @filenames = map {$_->{'filename'}} @{ $ls };
+    $self->is_success(1);
+    return \@filenames;
+}
+
+=head2 retrieve_batch_delete
+
+A new method not directly supported by BOP.
+Delete a batch from Litle.
+
+ my $opts = {
+  login       => 'testdrive',
+  password    => '123qwe',
+  batch_id    => '001',
+  ftp_username=> 'fred',
+  ftp_password=> 'pancakes',
+ };
+
+ $tx->retrieve_batch_delete( %$opts );
+
+=cut
+
+sub retrieve_batch_delete  {
+    my ( $self, %opts ) = @_;
+
+    local $SCRUBBER=1;
+    $self->_litle_init(\%opts);
+
+    $self->_die("Missing batch_id") if !$opts{'batch_id'};
+
+    my $sftp = $self->_sftp_connect(\%opts,'outbound');
+
+    my $filename = $opts{'batch_id'};
+    $sftp->remove( $filename )
+    or $self->_die("Cannot delete $filename: ", $sftp->error);
+
+    $self->is_success(1);
+}
+
 =head2 retrieve_batch
 
 A new method not directly supported by BOP.
@@ -1571,7 +1718,7 @@ Get a batch from Litle.
   login       => 'testdrive',
   password    => '123qwe',
   batch_id    => '001',
-  batch_return=> '',
+  batch_return=> '', # If present, this will be used instead of downloading from Litle
   ftp_username=> 'fred',
   ftp_password=> 'pancakes',
  };
@@ -1586,50 +1733,44 @@ sub retrieve_batch {
     my ( $self, %opts ) = @_;
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init(\%opts);
 
-    croak "Missing filename" if !$opts{'batch_id'};
+    $self->_die("Missing batch_id") if !$opts{'batch_id'};
+
     my $post_data;
     if ( $opts{'batch_return'} ) {
         ## passed in data structure
         $post_data = $opts{'batch_return'};
+        $self->server_request('Data was provided using batch_return option');
     }
     else {
         ## go download a batch
-        require Net::SFTP::Foreign;
-        my $sftp = Net::SFTP::Foreign->new(
-            $self->server(),
-            user     => $opts{'ftp_username'},
-            password => $opts{'ftp_password'},
-        );
-        $sftp->error and die "SSH connection failed: " . $sftp->error;
-
-        $sftp->setcwd("outbound")
-          or die "Cannot change working directory ", $sftp->error;
+        my $sftp = $self->_sftp_connect(\%opts,'outbound');
 
         my $filename = $opts{'batch_id'};
+        $self->server_request('SFTP requesting file: '.$filename,1);
         $post_data = $sftp->get_content( $filename )
-          or die "Cannot GET $filename", $sftp->error;
-        $self->is_success(1);
-        warn $post_data if $DEBUG;
+          or $self->_die("Cannot GET $filename", $sftp->error);
     }
+    $self->server_response_dangerous($post_data,1);
+    $self->server_response('Litle scrubber not initialized yet, see server_response_dangerous for a copy of the server response.  Please note it may contain data that is not appropriate to store.',1);
 
     my $response = {};
-    if ( ! eval { $response = XMLin($post_data); } ) {
-        die "XML PARSING FAILURE: $@";
+    if ( ! eval { $response = XMLin($post_data,
+                                ForceArray => [ 'accountUpdateResponse' ],
+                                KeyAttr => '-id',
+                            ); } ) {
+        $self->_die("XML PARSING FAILURE: $@");
     }
     elsif ( exists( $response->{'response'} ) && $response->{'response'} == 1 ) {
         ## parse error type error
         warn Dumper( $response, $self->{'_post_data'} );
-        $self->error_message( $response->{'message'} );
-        return;
+        $self->_die($response->{'message'} || 'No reason given');
     }
     else {
+        ## update the status
         $self->error_message( $response->{'batchResponse'}->{'message'} );
     }
-
-    $self->server_request( $post_data );
-    $self->server_response( $response );
 
     $self->{_response} = $response;
     my $resp = $response->{'batchResponse'};
@@ -1714,23 +1855,39 @@ sub _xmlwrite {
     }
 }
 
+sub _default_scrubber {
+    my $cc = shift;
+    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
+    return $del;
+}
+
 sub _litle_scrubber_add_card {
     my ( $self, $cc ) = @_;
     return if ! $cc;
-    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
-    scrubber_add_scrubber({$cc=>$del});
+    my $scrubber = $self->{_scrubber};
+    scrubber_add_scrubber({$cc=>&{$scrubber}($cc)});
 }
 
-sub _litle_scrubber_init {
+sub _litle_init {
     my ( $self, $opts ) = @_;
+
+    # initialize/reset the reporting methods
+    $self->is_success(0);
+    $self->server_request('');
+    $self->server_response('');
+    $self->error_message('');
+
+    # some calls are passed via the content method, others are direct arguments... this way we cover both
     my %content = $self->content();
-    if ($opts) { %content = %$opts; }
-    scrubber_init({
-        quotemeta($content{'password'}||'')=>'DELETED',
-        quotemeta($content{'ftp_password'}||'')=>'DELETED',
-        ($content{'cvv2'} ? '(?<=[^\d])'.quotemeta($content{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
-        });
-    $self->_litle_scrubber_add_card($content{'card_number'});
+    foreach my $ptr (\%content,$opts) {
+        next if ! $ptr;
+        scrubber_init({
+            quotemeta($ptr->{'password'}||'')=>'DELETED',
+            quotemeta($ptr->{'ftp_password'}||'')=>'DELETED',
+            ($ptr->{'cvv2'} ? '(?<=[^\d])'.quotemeta($ptr->{'cvv2'}).'(?=[^\d])' : '')=>'DELETED',
+            });
+        $self->_litle_scrubber_add_card($ptr->{'card_number'});
+    }
 }
 
 =head2 chargeback_activity_request
@@ -1749,19 +1906,17 @@ Return a arrayref that contains a list of Business::OnlinePayment::Litle::Charge
 
 sub chargeback_activity_request {
     my ( $self ) = @_;
-    my $post_data;
-
-    $self->is_success(0);
-    my %content = $self->content();
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init;
+
+    my $post_data;
+    my %content = $self->content();
 
     ## activity_date
     ## Type = Date; Format = YYYY-MM-DD
     if ( ! $content{'activity_date'} || $content{'activity_date'} !~ m/^\d{4}-(\d{2})-(\d{2})$/ || $1 > 12 || $2 > 31) {
-        die "Invalid Date Pattern, YYYY-MM-DD required:"
-          . ( $content{'activity_date'} || 'undef');
+        $self->_die("Invalid Date Pattern, YYYY-MM-DD required:" . ( $content{'activity_date'} || 'undef'));
     }
     #
     ## financials only [true,false]
@@ -1823,6 +1978,7 @@ sub chargeback_activity_request {
     } );
 
     my $page = $tiny_response->{'content'};
+    $self->server_request( $post_data );
     $self->server_response( $page );
     my $status_code = $tiny_response->{'status'};
     my %headers = %{$tiny_response->{'headers'}};
@@ -1832,8 +1988,10 @@ sub chargeback_activity_request {
     my $response = {};
     if ( $status_code =~ /^200/ ) {
         ## Failed to parse
-        if ( !eval { $response = XMLin($page); } ) {
-            die "XML PARSING FAILURE: $@, $page";
+        if ( !eval { $response = XMLin($page,
+                                ForceArray => [ 'caseActivity' ],
+                                ); } ) {
+            $self->_die("XML PARSING FAILURE: $@, $page");
         }    ## well-formed failure message
         elsif ( exists( $response->{'response'} )
             && $response->{'response'} == 1 )
@@ -1846,7 +2004,6 @@ sub chargeback_activity_request {
         else {
             $self->error_message(
                 $response->{'litleChargebackActivitiesResponse'}->{'message'} );
-            $self->is_success(1);
         }
     }
     else {
@@ -1855,14 +2012,11 @@ sub chargeback_activity_request {
         if ( $status_code =~ /^(?:900|599)/ ) {
             $status_code .= ' - verify Litle has whitelisted your IP';
         }
-        die "CONNECTION FAILURE: $status_code";
+        $self->_die("CONNECTION FAILURE: $status_code");
     }
     $self->{_response} = $response;
 
     my @response_list;
-    if (defined $response->{caseActivity} && ref $response->{caseActivity} ne 'ARRAY') {
-        $response->{caseActivity} = [$response->{caseActivity}]; # make sure we are an array
-    }
     require Business::OnlinePayment::Litle::ChargebackActivityResponse;
     foreach my $case ( @{ $response->{caseActivity} } ) {
        push @response_list,
@@ -1870,6 +2024,7 @@ sub chargeback_activity_request {
     }
 
     warn Dumper($response) if $DEBUG;
+    $self->is_success(1);
     return \@response_list;
 }
 
@@ -1896,13 +2051,12 @@ Return a arrayref that contains a list of Business::OnlinePayment::Litle::Charge
 
 sub chargeback_update_request {
     my ( $self ) = @_;
-    my $post_data;
-
-    $self->is_success(0);
-    my %content = $self->content();
 
     local $SCRUBBER=1;
-    $self->_litle_scrubber_init;
+    $self->_litle_init;
+
+    my $post_data;
+    my %content = $self->content();
 
     foreach my $key (qw(case_id merchant_activity_id activity )) {
         ## case_id
