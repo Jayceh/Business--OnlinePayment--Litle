@@ -3,10 +3,9 @@ use strict;
 use warnings;
 
 use Exporter 'import';
-use vars qw(@EXPORT_OK $VERSION);
+use vars qw(@EXPORT_OK);
 
 @EXPORT_OK = qw(lookup %ERRORS);
-$VERSION = '0.01';
 
 our %ERRORS;
 
