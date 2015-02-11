@@ -1,5 +1,6 @@
 package Business::OnlinePayment::Litle::UpdaterResponse;
 use strict;
+use warnings;
 
 =head1 NAME
 

@@ -1,5 +1,6 @@
 package Business::OnlinePayment::Litle::ChargebackActivityResponse;
 use strict;
+use warnings;
 
 =head1 NAME
 
