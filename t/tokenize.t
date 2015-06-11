@@ -21,6 +21,7 @@ my $authed =
 use_ok 'Business::OnlinePayment';
 
 SKIP: {
+    skip "No Auth Supplied", 3 if ! $authed;
     ok( $login, 'Supplied a Login' );
     ok( $password, 'Supplied a Password' );
     like( $merchantid, qr/^\d+/, 'Supplied a MerchantID');
