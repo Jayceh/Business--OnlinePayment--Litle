@@ -4,7 +4,7 @@ Business::OnlinePayment::Litle - Business::OnlinePayment::Litle - Vantiv (was Li
 
 # VERSION
 
-version 0.952
+version 0.953
 
 # SYNOPSIS
 
@@ -408,12 +408,6 @@ number as the first parameter and should return the masked version.
 
 # FUNCTIONS
 
-# AUTHORS
-
-Jason Hall, `<jayce at lug-nut.com>`
-
-Jason Terry
-
 # UNIMPLEMENTED
 
 Certain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
@@ -423,13 +417,7 @@ Certain features are not yet implemented (no current personal business need), th
     3DS
     billMeLater
 
-# BUGS
-
-Please report any bugs or feature requests to `bug-business-onlinepayment-litle at rt.cpan.org`, or through
-the web interface at [http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle](http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle). I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
-
-You may also add to the code via github, at [http://github.com/Jayceh/Business--OnlinePayment--Litle.git](http://github.com/Jayceh/Business--OnlinePayment--Litle.git)
+\# BUGS
 
 # SUPPORT
 
@@ -467,16 +455,6 @@ Jason Terry - Co-maintainer
 
 David Bartle - Vantiv tokenization support, custom card scrubbers
 
-# COPYRIGHT & LICENSE
-
-Copyright 2012 Jason Hall.
-
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
-
-See http://dev.perl.org/licenses/ for more information.
-
 # SEE ALSO
 
 perl(1). [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePayment)
@@ -484,13 +462,6 @@ perl(1). [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePaym
 # AUTHOR
 
 Jason Hall <jayce@cpan.org>
-
-# COPYRIGHT AND LICENSE
-
-This software is copyright (c) 2015 by Jason Hall.
-
-This is free software; you can redistribute it and/or modify it under
-the same terms as the Perl 5 programming language system itself.
 
 # CONTRIBUTORS
 
@@ -507,6 +478,9 @@ the same terms as the Perl 5 programming language system itself.
 - jayce <jayce@Raistlin.local>
 - root <root@jterry.(none)>
 
-# VERSION
+# COPYRIGHT AND LICENSE
 
-version 0.952
+This software is copyright (c) 2015 by Jason Hall.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
