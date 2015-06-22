@@ -4,7 +4,7 @@ Business::OnlinePayment::Litle - Business::OnlinePayment::Litle - Vantiv (was Li
 
 # VERSION
 
-version 0.951
+version 0.952
 
 # SYNOPSIS
 
@@ -509,4 +509,4 @@ the same terms as the Perl 5 programming language system itself.
 
 # VERSION
 
-version 0.951
+version 0.952
