@@ -9,6 +9,8 @@ use vars qw(@EXPORT_OK);
 
 our %ERRORS;
 
+# ABSTRACT: Business::OnlinePayment::Litle::ErrorCodes - Error code hash
+
 sub lookup {
     my $code = shift;
     return if not $code or not defined $ERRORS{$code};

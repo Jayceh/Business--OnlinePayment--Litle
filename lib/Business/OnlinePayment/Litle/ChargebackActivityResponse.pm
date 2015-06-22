@@ -2,6 +2,8 @@ package Business::OnlinePayment::Litle::ChargebackActivityResponse;
 use strict;
 use warnings;
 
+# ABSTRACT: Business::OnlinePayment::Litle::ChargebackActivityResponse - Response Objects
+
 =head1 NAME
 
 Business::OnlinePayment::Litle::ChargebackActivityResponse

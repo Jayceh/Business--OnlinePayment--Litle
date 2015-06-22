@@ -2,6 +2,8 @@ package Business::OnlinePayment::Litle::UpdaterResponse;
 use strict;
 use warnings;
 
+# ABSTRACT: Business::OnlinePayment::Litle::UpdaterResponse
+
 =head1 NAME
 
 Business::OnlinePayment::Litle::UpdaterResponse
