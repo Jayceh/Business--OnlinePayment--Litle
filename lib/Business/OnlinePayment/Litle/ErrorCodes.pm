@@ -1,9 +1,8 @@
 package Business::OnlinePayment::Litle::ErrorCodes;
-
-
 use strict;
 use warnings;
 
+# VERSION
 use Exporter 'import';
 use vars qw(@EXPORT_OK);
 
@@ -12,6 +11,12 @@ use vars qw(@EXPORT_OK);
 our %ERRORS;
 
 # ABSTRACT: Business::OnlinePayment::Litle::ErrorCodes - Error code hash
+
+=method lookup
+
+Return the information associated with an error code
+
+=cut
 
 sub lookup {
     my $code = shift;

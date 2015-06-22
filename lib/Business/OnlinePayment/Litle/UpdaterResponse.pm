@@ -1,10 +1,9 @@
 package Business::OnlinePayment::Litle::UpdaterResponse;
-
-
 use strict;
 use warnings;
 
 # ABSTRACT: Business::OnlinePayment::Litle::UpdaterResponse
+# VERSION
 
 =head1 NAME
 

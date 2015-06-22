@@ -7,7 +7,7 @@ use strict;
 use Business::OnlinePayment;
 use Business::OnlinePayment::HTTPS;
 use Business::OnlinePayment::Litle::ErrorCodes '%ERRORS';
-use vars qw(@ISA $me $DEBUG $VERSION);
+use vars qw(@ISA $me $DEBUG);
 use MIME::Base64;
 use HTTP::Tiny;
 use XML::Writer;
@@ -22,7 +22,7 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.950';
+# VERSION
 
 # PODNAME: Business::OnlinePayment::Litle
 
