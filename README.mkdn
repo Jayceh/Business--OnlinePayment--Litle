@@ -1,16 +1,18 @@
 # NAME
 
-Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
+Business::OnlinePayment::Litle - Business::OnlinePayment::Litle - Vantiv (was Litle & Co.) Backend for Business::OnlinePayment
 
 # VERSION
 
-Version 0.936
+version 0.951
 
 # SYNOPSIS
 
-This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Litle specific usage.
+This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Vantiv specific usage.
 
-In order to use this module, you will need to have an account set up with Litle & Co. [http://www.litle.com/](http://www.litle.com/)
+In order to use this module, you will need to have an account set up with Vantiv [http://www.vantiv.com/](http://www.vantiv.com/)
+
+Originally created for the Litle & Co. API, which became a part of the Vantiv corporation.
 
     use Business::OnlinePayment;
     my $tx = Business::OnlinePayment->new(
@@ -44,9 +46,7 @@ In order to use this module, you will need to have an account set up with Litle 
         print "Card was rejected: ".$tx->error_message."\n";
     }
 
-# METHODS AND FUNCTIONS
-
-See [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePayment) for the complete list. The following methods either override the methods in [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePayment) or provide additional functions.
+# METHODS
 
 ## result\_code
 
@@ -88,8 +88,6 @@ Returns the complete response from the server.  The response has been stripped o
 
 Returns the complete response from the server.  This could contain data that is NOT SAFE to log.  It should only be used in a test environment, or in a PCI compliant manner.
 
-# Handling of content(%content) data:
-
 ## action
 
 The following actions are valid
@@ -99,8 +97,6 @@ The following actions are valid
     post authorization
     credit
     void
-
-# Litle specific data
 
 ## Fields
 
@@ -133,33 +129,6 @@ Part of the enhanced data for level III Interchange rates
     }
 
     ],
-
-# SPECS
-
-Currently uses the Litle XML specifications version 8.12 and chargeback version 2.2
-
-# TESTING
-
-In order to run the provided test suite, you will first need to apply and get your account setup with Litle.  Then you can use the test account information they give you to run the test suite. The scripts will look for three environment variables to connect: BOP\_USERNAME, BOP\_PASSWORD, BOP\_MERCHANTID
-
-Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
-
-# CUSTOM LOG SCRUBBING FUNCTION
-
-The default card scrubbing leaves the first 6 and last 4 of the card number for logging.
-
-If you want to provide your own card number scrubber code ref, pass in the default\_Scrubber option to the constructor.  It takes the card
-number as the first parameter and should return the masked version.
-
-    my $tx = Business::OnlinePayment->new(
-       "Litle",
-       default_Origin => 'NEW',
-       default_Scrubber => sub {
-           return substr($_[0],-4,4);
-       }
-    );
-
-# FUNCTIONS
 
 ## \_info
 
@@ -404,6 +373,41 @@ Return a arrayref that contains a list of Business::OnlinePayment::Litle::Charge
     $tx->phoenixTxnId(); # Unique identifier provided by Litle.
     $tx->is_success(); # Boolean, did the request work
 
+# METHODS AND FUNCTIONS
+
+See [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePayment) for the complete list. The following methods either override the methods in [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePayment) or provide additional functions.
+
+# Handling of content(%content) data:
+
+# Litle specific data
+
+# SPECS
+
+Currently uses the Litle XML specifications version 8.12 and chargeback version 2.2
+
+# TESTING
+
+In order to run the provided test suite, you will first need to apply and get your account setup with Litle.  Then you can use the test account information they give you to run the test suite. The scripts will look for three environment variables to connect: BOP\_USERNAME, BOP\_PASSWORD, BOP\_MERCHANTID
+
+Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
+
+# CUSTOM LOG SCRUBBING FUNCTION
+
+The default card scrubbing leaves the first 6 and last 4 of the card number for logging.
+
+If you want to provide your own card number scrubber code ref, pass in the default\_Scrubber option to the constructor.  It takes the card
+number as the first parameter and should return the masked version.
+
+    my $tx = Business::OnlinePayment->new(
+       "Litle",
+       default_Origin => 'NEW',
+       default_Scrubber => sub {
+           return substr($_[0],-4,4);
+       }
+    );
+
+# FUNCTIONS
+
 # AUTHORS
 
 Jason Hall, `<jayce at lug-nut.com>`
@@ -457,6 +461,12 @@ You can also look for information at:
 
 Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it also required dynamically writing XML formatted docs to a gateway.
 
+Contributors
+
+Jason Terry - Co-maintainer
+
+David Bartle - Vantiv tokenization support, custom card scrubbers
+
 # COPYRIGHT & LICENSE
 
 Copyright 2012 Jason Hall.
@@ -470,3 +480,33 @@ See http://dev.perl.org/licenses/ for more information.
 # SEE ALSO
 
 perl(1). [Business::OnlinePayment](https://metacpan.org/pod/Business::OnlinePayment)
+
+# AUTHOR
+
+Jason Hall <jayce@cpan.org>
+
+# COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2015 by Jason Hall.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+# CONTRIBUTORS
+
+- David Bartle <captindave@gmail.com>
+- Jason Hall <jayce@bluehost.com>
+- Jason Hall <jayce@wyatt.(none)>
+- Jason (Jayce^) Hall <jayce@lug-nut.com>
+- Jason Terry <jterry@bluehost.com>
+- Jason Terry <jterry@Jasons-MacBook-Pro.local>
+- Jason Terry <jterry@jterry-laptop.(none)>
+- Jason Terry <jterry@jterry-mac.local>
+- Jason Terry <jterry@jterry.(none)>
+- Jason Terry <oaxlin@gmail.com>
+- jayce <jayce@Raistlin.local>
+- root <root@jterry.(none)>
+
+# VERSION
+
+version 0.951
