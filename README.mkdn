@@ -8,7 +8,7 @@ version 0.953
 
 # SYNOPSIS
 
-This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Vantiv specific usage.
+This is a plugin for the Business::OnlinePayment interface.  Please refer to that documentation for general usage, and here for Vantiv specific usage.
 
 In order to use this module, you will need to have an account set up with Vantiv [http://www.vantiv.com/](http://www.vantiv.com/)
 
@@ -158,7 +158,7 @@ Default: Live
 ## format\_misc\_field
 
 A new method not directly supported by BOP.
-Used internally to guarentee that XML data will conform to the Litle spec.
+Used internally to guarantee that XML data will conform to the Litle spec.
   field  - The hash key we are checking against
   maxLen - The maximum length allowed (extra bytes will be truncated)
   minLen - The minimum length allowed
@@ -445,7 +445,7 @@ You can also look for information at:
 
     [http://search.cpan.org/dist/Business-OnlinePayment-Litle/](http://search.cpan.org/dist/Business-OnlinePayment-Litle/)
 
-# ACKNOWLEDGEMENTS
+# ACKNOWLEDGMENTS
 
 Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it also required dynamically writing XML formatted docs to a gateway.
 
