@@ -17,4 +17,6 @@ matrix:
 sudo: false             # faster builds as long as you don't need sudo access
 before_install:
   - eval $(curl https://travis-perl.github.io/init) --auto
+env:
+   - secure: "JVS4P6+4scGIYTQ7p2Bo9Fxj7lnIeAnBnVlBR0k6+IIDBT0mYOTeBSsDK+LeTb7w/s3txn6iJKZexwvhzKTZ86SHg+3Unj6Fw8i6Deb1atoKWopNti7ZiA1pEupFeby5xpp8nsIHI5nvL4ss/ZfXUP6hwmPPv+HztysC9jRSM9yMCf/rRayeRyID6oY8zE+IksdmXTaI9lVawN8xyHgn8lssw8YMELVx92mwcJJFK7sgJ/jggVZACfIjU5jCQnmOoRBocA0we6XeHQ7gvVAoUEIv0U2D9oD+21pxb+vOjjJgqPBE6f+IZ39Nk0y7+vRt08kxcumdwkX+sj0owsRbLoOgKw64qP5EM6Gmxx0/6cGNJ3d/cUvDawpbx1a3O8Qk6ILvy2GPA7Q23pK5yMHiGT4bdwVn7gfXNSaO0ufnZKSYzw5E1uNDTuCofqWmo43JDmTYMoct8volr+RajHzKSXCJWiccJRIz2AZG1V8Ajx0wRQ09QHTMs71xHBmxB6k+qJjGMHmnGfeEjgaU2TB6IlyoppQt3sEe/XOM9x64mjAyawNYC/3qtGWnMmDQhyRlMyg/XlmvgFACtWDnWbPHdB9bGhho6CP8XYdHSGiNdqDwI4glyNpLZ6uvTqmWPO1LShh2PclJVpZxRo3CJrX6jnii59bVIwDFra0NGBu7XEo="
 
