@@ -30,7 +30,7 @@ $DEBUG   = 0;
 
 =head1 SYNOPSIS
 
-This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Vantiv specific usage.
+This is a plugin for the Business::OnlinePayment interface.  Please refer to that documentation for general usage, and here for Vantiv specific usage.
 
 In order to use this module, you will need to have an account set up with Vantiv L<http://www.vantiv.com/>
 
@@ -476,7 +476,7 @@ sub map_fields {
 =method format_misc_field
 
 A new method not directly supported by BOP.
-Used internally to guarentee that XML data will conform to the Litle spec.
+Used internally to guarantee that XML data will conform to the Litle spec.
   field  - The hash key we are checking against
   maxLen - The maximum length allowed (extra bytes will be truncated)
   minLen - The minimum length allowed
@@ -582,7 +582,7 @@ sub map_request {
     # make sure the date is in MMYY format
     $content->{'expiration'} =~ s/^(\d{1,2})\D*\d*?(\d{2})$/$1$2/;
 
-    if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # shema req
+    if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # schema req
     $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
 
     # Litle pre 0.934 used token, however BOP likes card_token
@@ -685,7 +685,7 @@ sub map_request {
         descriptor => 'description',
       );
 
-    ## loop through product list and generate linItemData for each
+    ## loop through product list and generate lineItemData for each
     #
     my @products = ();
     if( defined $content->{'products'} && scalar( @{ $content->{'products'} } ) < 100 ){
@@ -1116,7 +1116,7 @@ Upload a new file
   case_id     => '001',
   filename    => 'mydoc.pdf',
   filecontent => $binaryPdfData,
-  mimetype    => 'applicatoin/pdf',
+  mimetype    => 'application/pdf',
  );
  $tx->chargeback_upload_support_doc();
 
@@ -2205,7 +2205,7 @@ L<http://search.cpan.org/dist/Business-OnlinePayment-Litle/>
 =back
 
 
-=head1 ACKNOWLEDGEMENTS
+=head1 ACKNOWLEDGMENTS
 
 Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it also required dynamically writing XML formatted docs to a gateway.
 
