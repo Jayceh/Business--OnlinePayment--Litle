@@ -9,7 +9,6 @@ perl:
   - "5.18"
   - "5.20"              # installs latest perl 5.20 (if not already available)
   - "5.22"             # installs latest perl 5.22.1 (if not already available)
-  - "dev"               # installs latest developer release of perl (e.g. 5.21.8)
   - "blead"             # builds perl from git
 matrix:
   allow_failures:
