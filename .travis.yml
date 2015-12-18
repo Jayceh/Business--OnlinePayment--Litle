@@ -19,7 +19,7 @@ sudo: false             # faster builds as long as you don't need sudo access
 before_install:
   - eval $(curl https://travis-perl.github.io/init) --auto
 install:
-  - cpanm JSON::PP Dist::Zilla Dist::Zilla::Plugin::BlockRelease
+  - cpanm JSON::PP Dist::Zilla
   - dzil authordeps --missing | cpanm || { cat ~/.cpanm/build.log ; false ; }
   - dzil listdeps --author --missing | cpanm || { cat ~/.cpanm/build.log ; false ; }
 env:
