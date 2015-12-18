@@ -26,3 +26,5 @@ install:
    - "dzil listdeps   --author --missing | grep -vP '[^\\w:]' | cpanm --verbose"
 script:
    - dzil smoke --release --author
+env:
+   - secure: "GwtQHeOLhjHoMIGDcCEg6XkkE68Bjbrh1d38G0ehfEgUfGDCQt6PjSBZXkg/PmIxUHdRo5hARRjAAHyX+KDfO2s8+dBr8ikKJxIO/TMJK2753I/0Vv4oiWEnLQx01jcAKdIHJRFLcYTaUnYevANK+baMxbAw4fbmDqGAcgPxMLW55vEWCO72E8DIdsvNQ1sm4ke/BBJ2hdhOLyAINdoT93DE91CnqvIHAA3MY6/MvH0CawgLTwxNJJnfLSdl1i8TCD0Ibw99BICXwA19bgf+HdCvPmMfz3RSf60XkCvYR3O9blDvYKE+m1TwWwjjssrDjEzlxJ4BBhgL2q/Oue2bg6Zkrua5ciAhPd1Y4m6rn3yd5u/z1Tjl97jyfgIcmqWK97M5uE+OTMdGvQ2CMT5gbUQL5bFMtLZCcHDSXIG1xKE2NnT6bH3LDGmcNHaA5EvUebVND1qtmrF7FV0c5N7IyFufCKwPa+ud2oTPJlsaqfifxJj+CquG9B6+QlpuQ8kI0H8Uy7I/bQYeuRQtYKawKLWDaBR4eZeVSDZ6N4Hx31jBlU/Z6/sO8t99l3Kv96XxGPmCgy0rcJmshKSHBMxIiaH2CXGG2R0s0ygrRahsyalJ2q8yZi+YCW+FDdFeSDuJVrQ8fr/bX2aBWI70VwtQ47RGMtZr1jVBMuPgnU9lQUw="
