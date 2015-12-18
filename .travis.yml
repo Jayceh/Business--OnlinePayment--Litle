@@ -1,27 +1,30 @@
+sudo: false
 language: perl
 perl:
   - "5.8"               # normal preinstalled perl
   - "5.10"
-  - "5.12"            # builds perl 5.12.2 from source (pre-built not available)
+  - "5.12"
+  - "5.14"
   - "5.16"
   - "5.18"
   - "5.20"              # installs latest perl 5.20 (if not already available)
   - "5.22"             # installs latest perl 5.22.1 (if not already available)
-  - "dev"               # installs latest developer release of perl (e.g. 5.21.8)
   - "blead"             # builds perl from git
 matrix:
-  include:
-    - perl: 5.18
-      env: COVERAGE=1   # enables coverage+coveralls reporting
   allow_failures:
     - perl: blead       # ignore failures for blead perl
-sudo: false             # faster builds as long as you don't need sudo access
+    - perl: '5.8'
+    - perl: '5.8.4'
+    - perl: '5.8.4-thr'
+  fast_finish: true
 before_install:
-  - eval $(curl https://travis-perl.github.io/init) --auto
+   - git config --global user.name "TravisCI"
+   - git config --global user.email $HOSTNAME":not-for-mail@travis-ci.org"
 install:
-  - cpanm JSON::PP Dist::Zilla
-  - dzil authordeps --missing | cpanm || { cat ~/.cpanm/build.log ; false ; }
-  - dzil listdeps --author --missing | cpanm || { cat ~/.cpanm/build.log ; false ; }
+   - cpanm --quiet --notest --skip-satisfied Dist::Zilla
+   - "dzil authordeps          --missing | grep -vP '[^\\w:]' | xargs -n 5 -P 10 cpanm --quiet --notest"
+   - "dzil listdeps   --author --missing | grep -vP '[^\\w:]' | cpanm --verbose"
+script:
+   - dzil smoke --release --author
 env:
    - secure: "GwtQHeOLhjHoMIGDcCEg6XkkE68Bjbrh1d38G0ehfEgUfGDCQt6PjSBZXkg/PmIxUHdRo5hARRjAAHyX+KDfO2s8+dBr8ikKJxIO/TMJK2753I/0Vv4oiWEnLQx01jcAKdIHJRFLcYTaUnYevANK+baMxbAw4fbmDqGAcgPxMLW55vEWCO72E8DIdsvNQ1sm4ke/BBJ2hdhOLyAINdoT93DE91CnqvIHAA3MY6/MvH0CawgLTwxNJJnfLSdl1i8TCD0Ibw99BICXwA19bgf+HdCvPmMfz3RSf60XkCvYR3O9blDvYKE+m1TwWwjjssrDjEzlxJ4BBhgL2q/Oue2bg6Zkrua5ciAhPd1Y4m6rn3yd5u/z1Tjl97jyfgIcmqWK97M5uE+OTMdGvQ2CMT5gbUQL5bFMtLZCcHDSXIG1xKE2NnT6bH3LDGmcNHaA5EvUebVND1qtmrF7FV0c5N7IyFufCKwPa+ud2oTPJlsaqfifxJj+CquG9B6+QlpuQ8kI0H8Uy7I/bQYeuRQtYKawKLWDaBR4eZeVSDZ6N4Hx31jBlU/Z6/sO8t99l3Kv96XxGPmCgy0rcJmshKSHBMxIiaH2CXGG2R0s0ygrRahsyalJ2q8yZi+YCW+FDdFeSDuJVrQ8fr/bX2aBWI70VwtQ47RGMtZr1jVBMuPgnU9lQUw="
-
