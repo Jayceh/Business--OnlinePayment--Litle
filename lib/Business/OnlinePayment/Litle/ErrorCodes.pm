@@ -2,13 +2,21 @@ package Business::OnlinePayment::Litle::ErrorCodes;
 use strict;
 use warnings;
 
+# VERSION
 use Exporter 'import';
-use vars qw(@EXPORT_OK $VERSION);
+use vars qw(@EXPORT_OK);
 
 @EXPORT_OK = qw(lookup %ERRORS);
-$VERSION = '0.01';
 
 our %ERRORS;
+
+# ABSTRACT: Business::OnlinePayment::Litle::ErrorCodes - Error code hash
+
+=method lookup
+
+Return the information associated with an error code
+
+=cut
 
 sub lookup {
     my $code = shift;
@@ -354,48 +362,4 @@ sub lookup {
                      notes => 'Invalid Bank Routing Number'
                    }
         );
-
-=head1 NAME
-
-Business::OnlinePayment::Litle::ErrorCodes - Map given codes with more verbose messages
-
-=head1 SYNOPSIS
-    
-    use Business::OnlinePayment::Litle::ErrorCodes 'lookup';
-    my $result = lookup( $result_code );
-    # $result = { reason => ..., notes => ..., status => ... };
-
-or
-      
-    use Business::OnlinePayment::Litle::ErrorCodes '%ERRORS';
-    my $result = $ERRORS{ $result_code };
-               
-=head1 DESCRIPTION
-               
-This module provides a method to lookup extended codes to Litle & Co API responses
-                
-=head2 lookup CODE
-      
-Takes the result code returned in your Litle response.  Returns a 
-hashref containing three keys, C<reason>, C<status>, and C<notes> (which may be empty) if
-the lookup is successful, undef otherwise.  This allows for more descriptive error messages, as well as categorization into hard and soft failure types.
-      
-=head1 AUTHOR
-
-Jason (Jayce^) Hall <jayce@lug-nut.com>
-
-=head1 AKNOWLEDGEMENTS
-
-Thomas Sibley <trs@bestpractical.com> wrote the AIM module.  This follows the same pattern
-               
-=head1 COPYRIGHT AND LICENSE
-                
-Copyright (c) 2010.
-              
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself, either Perl version 5.8.3 or,
-at your option, any later version of Perl 5 you may have available.
-               
-=cut  
-
 1;

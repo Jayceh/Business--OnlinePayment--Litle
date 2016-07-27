@@ -7,7 +7,7 @@ use strict;
 use Business::OnlinePayment;
 use Business::OnlinePayment::HTTPS;
 use Business::OnlinePayment::Litle::ErrorCodes '%ERRORS';
-use vars qw(@ISA $me $DEBUG $VERSION);
+use vars qw(@ISA $me $DEBUG);
 use MIME::Base64;
 use HTTP::Tiny;
 use XML::Writer;
@@ -22,23 +22,19 @@ use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 @ISA     = qw(Business::OnlinePayment::HTTPS);
 $me      = 'Business::OnlinePayment::Litle';
 $DEBUG   = 0;
-$VERSION = '0.939';
+# VERSION
 
-=head1 NAME
+# PODNAME: Business::OnlinePayment::Litle
 
-Business::OnlinePayment::Litle - Litle & Co. Backend for Business::OnlinePayment
-
-=head1 VERSION
-
-Version 0.936
-
-=cut
+# ABSTRACT: Business::OnlinePayment::Litle - Vantiv (was Litle & Co.) Backend for Business::OnlinePayment
 
 =head1 SYNOPSIS
 
-This is a plugin for the Business::OnlinePayment interface.  Please refer to that docuementation for general usage, and here for Litle specific usage.
+This is a plugin for the Business::OnlinePayment interface.  Please refer to that documentation for general usage, and here for Vantiv specific usage.
 
-In order to use this module, you will need to have an account set up with Litle & Co. L<http://www.litle.com/>
+In order to use this module, you will need to have an account set up with Vantiv L<http://www.vantiv.com/>
+
+Originally created for the Litle & Co. API, which became a part of the Vantiv corporation.
 
 
   use Business::OnlinePayment;
@@ -77,15 +73,31 @@ In order to use this module, you will need to have an account set up with Litle 
 
 See L<Business::OnlinePayment> for the complete list. The following methods either override the methods in L<Business::OnlinePayment> or provide additional functions.
 
-=head2 result_code
+=method result_code
 
 Returns the response error code.
 
-=head2 error_message
+=method error_message
 
 Returns the response error description text.
 
-=head2 server_request
+=method is_duplicate
+
+Returns 1 if the request was a duplicate, 0 otherwise
+
+=method card_token
+
+Return the card token if present.  You will need to have the card tokenization feature enabled for this feature to make sense.
+
+=method card_token_response
+
+Return the Litle specific response code for the tokenization request
+
+=method card_token_message
+
+Return the Litle human readable response to the tokenization request
+
+=method server_request
 
 Returns the complete request that was sent to the server.  The request has been stripped of card_num, cvv2, and password.  So it should be safe to log.
 
@@ -100,7 +112,7 @@ sub server_request {
     return $self->{server_request};
 }
 
-=head2 server_request_dangerous
+=method server_request_dangerous
 
 Returns the complete request that was sent to the server.  This could contain data that is NOT SAFE to log.  It should only be used in a test environment, or in a PCI compliant manner.
 
@@ -115,7 +127,7 @@ sub server_request_dangerous {
     return $self->{server_request_dangerous};
 }
 
-=head2 server_response
+=method server_response
 
 Returns the complete response from the server.  The response has been stripped of card_num, cvv2, and password.  So it should be safe to log.
 
@@ -130,7 +142,7 @@ sub server_response {
     return $self->{server_response};
 }
 
-=head2 server_response_dangerous
+=method server_response_dangerous
 
 Returns the complete response from the server.  This could contain data that is NOT SAFE to log.  It should only be used in a test environment, or in a PCI compliant manner.
 
@@ -147,7 +159,7 @@ sub server_response_dangerous {
 
 =head1 Handling of content(%content) data:
 
-=head2 action
+=method action
 
 The following actions are valid
 
@@ -160,13 +172,13 @@ The following actions are valid
 
 =head1 Litle specific data
 
-=head2 Fields
+=method Fields
 
 Most data fields not part of the BOP standard can be added to the content hash directly, and will be used
 
 Most data fields will truncate extra characters to conform to the Litle XML length requirements.  Some fields (mostly amount fields) will error if your data exceeds the allowed length.
 
-=head2 Products
+=method Products
 
 Part of the enhanced data for level III Interchange rates
 
@@ -204,9 +216,24 @@ In order to run the provided test suite, you will first need to apply and get yo
 
 Currently the description field also uses a fixed descriptor.  This will possibly need to be changed based on your arrangements with Litle.
 
+=head1 CUSTOM LOG SCRUBBING FUNCTION
+
+The default card scrubbing leaves the first 6 and last 4 of the card number for logging.
+
+If you want to provide your own card number scrubber code ref, pass in the default_Scrubber option to the constructor.  It takes the card
+number as the first parameter and should return the masked version.
+
+  my $tx = Business::OnlinePayment->new(
+     "Litle",
+     default_Origin => 'NEW',
+     default_Scrubber => sub {
+         return substr($_[0],-4,4);
+     }
+  );
+
 =head1 FUNCTIONS
 
-=head2 _info
+=method _info
 
 Return the introspection hash for BOP 3.x
 
@@ -232,7 +259,7 @@ sub _info {
     };
 }
 
-=head2 set_defaults
+=method set_defaults
 
 =cut
 
@@ -244,7 +271,7 @@ sub set_defaults {
         qw( order_number md5 avs_code cvv2_response card_token
           cavv_response api_version xmlns failure_status batch_api_version chargeback_api_version
           is_prepaid prepaid_balance get_affluence chargeback_server chargeback_port chargeback_path
-          verify_SSL phoenixTxnId
+          verify_SSL phoenixTxnId is_duplicate card_token card_token_response card_token_message
           )
     );
 
@@ -263,13 +290,24 @@ sub set_defaults {
         delete $opts{$key};
     }
 
+    $self->{_scrubber} = \&_default_scrubber;
+    if( defined $_defaults{'Scrubber'} ) {
+        my $code = $_defaults{'Scrubber'};
+        if( ref($code) ne 'CODE' ) {
+            warn('default_Scrubber is not a code ref');
+        }
+        else {
+            $self->{_scrubber} = $code;
+        }
+    }
+
     $self->api_version('8.1')                   unless $self->api_version;
     $self->batch_api_version('8.1')             unless $self->batch_api_version;
     $self->chargeback_api_version('2.2')        unless $self->chargeback_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
 
-=head2 test_transaction
+=method test_transaction
 
 Get/set the server used for processing transactions.  Possible values are Live, Certification, and Sandbox
 Default: Live
@@ -354,7 +392,7 @@ sub test_transaction {
     return $self->{'test_transaction'};
 }
 
-=head2 map_fields
+=method map_fields
 
 =cut
 
@@ -436,10 +474,10 @@ sub map_fields {
     return $content;
 }
 
-=head2 format_misc_field
+=method format_misc_field
 
 A new method not directly supported by BOP.
-Used internally to guarentee that XML data will conform to the Litle spec.
+Used internally to guarantee that XML data will conform to the Litle spec.
   field  - The hash key we are checking against
   maxLen - The maximum length allowed (extra bytes will be truncated)
   minLen - The minimum length allowed
@@ -476,7 +514,7 @@ sub format_misc_field {
     }
 }
 
-=head2 format_amount_field
+=method format_amount_field
 
 A new method not directly supported by BOP.
 Used internally to change amounts from the BOP "5.00" format to the format expected by Litle "500"
@@ -493,7 +531,7 @@ sub format_amount_field {
     }
 }
 
-=head2 format_phone_field
+=method format_phone_field
 
 A new method not directly supported by BOP.
 Used internally to strip invalid characters from phone numbers. IE "1 (800).TRY-THIS" becomes "18008788447"
@@ -519,7 +557,7 @@ sub format_phone_field {
     }
 }
 
-=head2 map_request
+=method map_request
 
 Converts the BOP data to something that Litle can use.
 
@@ -545,7 +583,7 @@ sub map_request {
     # make sure the date is in MMYY format
     $content->{'expiration'} =~ s/^(\d{1,2})\D*\d*?(\d{2})$/$1$2/;
 
-    if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # shema req
+    if ( ! defined $content->{'description'} ) { $content->{'description'} = ''; } # schema req
     $content->{'description'} =~ s/[^\w\s\*\,\-\'\#\&\.]//g;
 
     # Litle pre 0.934 used token, however BOP likes card_token
@@ -648,7 +686,7 @@ sub map_request {
         descriptor => 'description',
       );
 
-    ## loop through product list and generate linItemData for each
+    ## loop through product list and generate lineItemData for each
     #
     my @products = ();
     if( defined $content->{'products'} && scalar( @{ $content->{'products'} } ) < 100 ){
@@ -985,6 +1023,18 @@ sub submit {
     }
 
     #$self->is_dupe( $resp->{'duplicate'} ? 1 : 0 );
+    if( defined $resp->{'duplicate'} && $resp->{'duplicate'} eq 'true' ) {
+        $self->is_duplicate(1);
+    }
+    else {
+        $self->is_duplicate(0);
+    }
+
+    if( defined $resp->{tokenResponse} ) {
+        $self->card_token($resp->{tokenResponse}->{litleToken});
+        $self->card_token_response($resp->{tokenResponse}->{tokenResponseCode});
+        $self->card_token_message($resp->{tokenResponse}->{tokenMessage});
+    }
 
     if( $resp->{enhancedAuthResponse}
         && $resp->{enhancedAuthResponse}->{affluence}
@@ -1020,7 +1070,7 @@ sub submit {
 
 }
 
-=head2 chargeback_retrieve_support_doc
+=method chargeback_retrieve_support_doc
 
 A new method not directly supported by BOP.
 Retrieve a currently uploaded file
@@ -1043,7 +1093,7 @@ sub chargeback_retrieve_support_doc {
     if ($self->is_success) { $self->{'fileContent'} = $self->{'server_response_dangerous'}; } else { $self->{'fileContent'} = undef; }
 }
 
-=head2 chargeback_delete_support_doc
+=method chargeback_delete_support_doc
 
 A new method not directly supported by BOP.
 Delete a currently uploaded file.  Follows the same format as chargeback_retrieve_support_doc
@@ -1055,7 +1105,7 @@ sub chargeback_delete_support_doc {
     $self->_litle_support_doc('DELETE' );
 }
 
-=head2 chargeback_upload_support_doc
+=method chargeback_upload_support_doc
 
 A new method not directly supported by BOP.
 Upload a new file
@@ -1067,7 +1117,7 @@ Upload a new file
   case_id     => '001',
   filename    => 'mydoc.pdf',
   filecontent => $binaryPdfData,
-  mimetype    => 'applicatoin/pdf',
+  mimetype    => 'application/pdf',
  );
  $tx->chargeback_upload_support_doc();
 
@@ -1078,7 +1128,7 @@ sub chargeback_upload_support_doc {
     $self->_litle_support_doc('UPLOAD' );
 }
 
-=head2 chargeback_replace_support_doc
+=method chargeback_replace_support_doc
 
 A new method not directly supported by BOP.
 Replace a previously uploaded file.  Follows the same format as chargeback_upload_support_doc
@@ -1169,7 +1219,7 @@ sub _litle_support_doc {
     }
 }
 
-=head2 chargeback_list_support_docs
+=method chargeback_list_support_docs
 
 A new method not directly supported by BOP.
 Return a hashref that contains a list of files that already exist on the server.
@@ -1270,7 +1320,7 @@ sub _parse_batch_response {
     };
 }
 
-=head2 add_item
+=method add_item
 
 A new method not directly supported by BOP.
 Interface to adding multiple entries, so we can write and interface with batches
@@ -1294,7 +1344,7 @@ sub add_item {
     push @{ $self->{'batch_entries'} }, shift;
 }
 
-=head2 create_batch
+=method create_batch
 
 A new method not directly supported by BOP.
 Send the current batch to Litle.
@@ -1463,7 +1513,7 @@ sub create_batch {
 
 }
 
-=head2 send_rfr
+=method send_rfr
 
 A new method not directly supported by BOP.
 
@@ -1591,7 +1641,7 @@ sub _die {
     die $msg."\n";
 }
 
-=head2 retrieve_batch_list
+=method retrieve_batch_list
 
 A new method not directly supported by BOP.
 Get a list of available batch result files.
@@ -1622,7 +1672,7 @@ sub retrieve_batch_list {
     return \@filenames;
 }
 
-=head2 retrieve_batch_delete
+=method retrieve_batch_delete
 
 A new method not directly supported by BOP.
 Delete a batch from Litle.
@@ -1656,7 +1706,7 @@ sub retrieve_batch_delete  {
     $self->is_success(1);
 }
 
-=head2 retrieve_batch
+=method retrieve_batch
 
 A new method not directly supported by BOP.
 Get a batch from Litle.
@@ -1802,11 +1852,17 @@ sub _xmlwrite {
     }
 }
 
+sub _default_scrubber {
+    my $cc = shift;
+    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
+    return $del;
+}
+
 sub _litle_scrubber_add_card {
     my ( $self, $cc ) = @_;
     return if ! $cc;
-    my $del = substr($cc,0,6).('X'x(length($cc)-10)).substr($cc,-4,4); # show first 6 and last 4
-    scrubber_add_scrubber({$cc=>$del});
+    my $scrubber = $self->{_scrubber};
+    scrubber_add_scrubber({$cc=>&{$scrubber}($cc)});
 }
 
 sub _litle_init {
@@ -1831,7 +1887,7 @@ sub _litle_init {
     }
 }
 
-=head2 chargeback_activity_request
+=method chargeback_activity_request
 
 Return a arrayref that contains a list of Business::OnlinePayment::Litle::ChargebackActivityResponse objects
 
@@ -1969,7 +2025,7 @@ sub chargeback_activity_request {
     return \@response_list;
 }
 
-=head2 chargeback_update_request
+=method chargeback_update_request
 
 Return a arrayref that contains a list of Business::OnlinePayment::Litle::ChargebackActivityResponse objects
 
@@ -2094,11 +2150,6 @@ sub chargeback_update_request {
     }
 }
 
-=head1 AUTHORS
-
-Jason Hall, C<< <jayce at lug-nut.com> >>
-
-Jason Terry
 
 =head1 UNIMPLEMENTED
 
@@ -2111,9 +2162,8 @@ Certain features are not yet implemented (no current personal business need), th
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle>. I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
+Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>.
+I will be notified, and then you'll automatically be notified of progress on your bug as I make changes.
 
 You may also add to the code via github, at L<http://github.com/Jayceh/Business--OnlinePayment--Litle.git>
 
@@ -2124,16 +2174,11 @@ You can find documentation for this module with the perldoc command.
 
     perldoc Business::OnlinePayment::Litle
 
-
 You can also look for information at:
 
-L<http://www.litle.com/>
+L<http://www.vantiv.com/>
 
 =over 4
-
-=item * RT: CPAN's request tracker
-
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Business-OnlinePayment-Litle>
 
 =item * AnnoCPAN: Annotated CPAN documentation
 
@@ -2143,28 +2188,11 @@ L<http://annocpan.org/dist/Business-OnlinePayment-Litle>
 
 L<http://cpanratings.perl.org/d/Business-OnlinePayment-Litle>
 
-=item * Search CPAN
-
-L<http://search.cpan.org/dist/Business-OnlinePayment-Litle/>
-
 =back
 
-
-=head1 ACKNOWLEDGEMENTS
+=head1 ACKNOWLEDGMENTS
 
 Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it also required dynamically writing XML formatted docs to a gateway.
-
-=head1 COPYRIGHT & LICENSE
-
-Copyright 2012 Jason Hall.
-
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
-
-See http://dev.perl.org/licenses/ for more information.
-
-
 
 =head1 SEE ALSO
 
