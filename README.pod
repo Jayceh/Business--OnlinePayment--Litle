@@ -6,7 +6,7 @@ Business::OnlinePayment::Litle - Business::OnlinePayment::Litle - Vantiv (was Li
 
 =head1 VERSION
 
-version 0.953
+version 0.954
 
 =head1 SYNOPSIS
 
@@ -462,7 +462,7 @@ Jason Hall <jayce@cpan.org>
 
 =head1 CONTRIBUTORS
 
-=for stopwords Daina Pettit David Bartle Jason (Jayce^) Hall Terry
+=for stopwords Daina Pettit David Bartle Jason Hall (Jayce^) Terry
 
 =over 4
 
@@ -476,6 +476,10 @@ David Bartle <captindave@gmail.com>
 
 =item *
 
+Jason Hall <jayce@jaycehall.com>
+
+=item *
+
 Jason (Jayce^) Hall <jayce@lug-nut.com>
 
 =item *
@@ -486,7 +490,7 @@ Jason Terry <oaxlin@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2016 by Jason Hall.
+This software is copyright (c) 2017 by Jason Hall.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

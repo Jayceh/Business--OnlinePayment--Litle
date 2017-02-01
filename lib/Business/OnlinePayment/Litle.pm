@@ -1614,13 +1614,16 @@ sub _sftp_connect {
     my ($self,$args,$dir) = @_;
     $self->_die("Missing ftp_username") if ! $args->{'ftp_username'};
     $self->_die("Missing ftp_password") if ! $args->{'ftp_password'};
+    my $more_args = [];
+    push @$more_args, ( -o => 'UserKnownHostsFile=' . $args->{'sftp_hosts_file'} ) if $args->{'sftp_hosts_file'};
     require Net::SFTP::Foreign;
     my $sftp = Net::SFTP::Foreign->new(
         $self->server(),
-        timeout  => $args->{'ftp_timeout'} || 90,
+        timeout        => $args->{'ftp_timeout'} || 90,
         stderr_discard => 1,
-        user     => $args->{'ftp_username'},
-        password => $args->{'ftp_password'},
+        user           => $args->{'ftp_username'},
+        password       => $args->{'ftp_password'},
+        more           => $more_args,
     );
     $sftp->error and $self->_die("SSH connection failed: " . $sftp->error);
 
