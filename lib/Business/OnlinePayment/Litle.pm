@@ -2149,11 +2149,6 @@ sub chargeback_update_request {
     }
 }
 
-=head1 AUTHORS
-
-Jason Hall, C<< <jayce at lug-nut.com> >>
-
-Jason Terry
 
 =head1 UNIMPLEMENTED
 
@@ -2166,9 +2161,8 @@ Certain features are not yet implemented (no current personal business need), th
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=Business-OnlinePayment-Litle>. I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
+Please report any bugs or feature requests to C<bug-business-onlinepayment-litle at rt.cpan.org>.
+I will be notified, and then you'll automatically be notified of progress on your bug as I make changes.
 
 You may also add to the code via github, at L<http://github.com/Jayceh/Business--OnlinePayment--Litle.git>
 
@@ -2179,16 +2173,11 @@ You can find documentation for this module with the perldoc command.
 
     perldoc Business::OnlinePayment::Litle
 
-
 You can also look for information at:
 
-L<http://www.litle.com/>
+L<http://www.vantiv.com/>
 
 =over 4
-
-=item * RT: CPAN's request tracker
-
-L<http://rt.cpan.org/NoAuth/Bugs.html?Dist=Business-OnlinePayment-Litle>
 
 =item * AnnoCPAN: Annotated CPAN documentation
 
@@ -2198,34 +2187,11 @@ L<http://annocpan.org/dist/Business-OnlinePayment-Litle>
 
 L<http://cpanratings.perl.org/d/Business-OnlinePayment-Litle>
 
-=item * Search CPAN
-
-L<http://search.cpan.org/dist/Business-OnlinePayment-Litle/>
-
 =back
-
 
 =head1 ACKNOWLEDGMENTS
 
 Heavily based on Jeff Finucane's l<Business::OnlinePayment::IPPay> because it also required dynamically writing XML formatted docs to a gateway.
-
-Contributors
-
-Jason Terry - Co-maintainer
-
-David Bartle - Vantiv tokenization support, custom card scrubbers
-
-=head1 COPYRIGHT & LICENSE
-
-Copyright 2012 Jason Hall.
-
-This program is free software; you can redistribute it and/or modify it
-under the terms of either: the GNU General Public License as published
-by the Free Software Foundation; or the Artistic License.
-
-See http://dev.perl.org/licenses/ for more information.
-
-
 
 =head1 SEE ALSO
 
