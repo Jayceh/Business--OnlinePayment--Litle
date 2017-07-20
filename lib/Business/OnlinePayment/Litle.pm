@@ -242,7 +242,7 @@ sub _info {
     return {
         info_compat       => '0.01',
         gateway_name      => 'Litle',
-        gateway_url       => 'http://www.litle.com',
+        gateway_url       => 'http://www.vantiv.com',
         module_version    => $VERSION,
         supported_types   => ['CC'],
         supported_actions => {
@@ -357,33 +357,33 @@ sub test_transaction {
     $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
-        $self->server('prelive.litle.com');
+        $self->server('payments.vantivprelive.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
 
-        $self->chargeback_server('service-prelive.litle.com');
+        $self->chargeback_server('services.vantivprelive.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
     $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
-        $self->server('postlive.litle.com');
+        $self->server('payments.vantivpostlive.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
 
-        $self->chargeback_server('service-postlive.litle.com');
+        $self->chargeback_server('services.vantivpostlive.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
     $self->{'test_transaction'} = 0;
         $self->verify_SSL(1);
 
-        $self->server('payments.litle.com');
+        $self->server('payments.vantivcnp.com');
         $self->port('443');
         $self->path('/vap/communicator/online');
 
-        $self->chargeback_server('services.litle.com');
+        $self->chargeback_server('services.vantivcnp.com');
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     }
