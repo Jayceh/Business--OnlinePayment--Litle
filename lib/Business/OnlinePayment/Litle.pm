@@ -207,7 +207,7 @@ Part of the enhanced data for level III Interchange rates
 
 =head1 SPECS
 
-Currently uses the Litle XML specifications version 8.12 and chargeback version 2.2
+Currently uses the Litle XML specifications version 11.0 and chargeback version 2.2
 
 =head1 TESTING
 
@@ -300,8 +300,8 @@ sub set_defaults {
         }
     }
 
-    $self->api_version('8.1')                   unless $self->api_version;
-    $self->batch_api_version('8.1')             unless $self->batch_api_version;
+    $self->api_version('11.0')                   unless $self->api_version;
+    $self->batch_api_version('11.0')             unless $self->batch_api_version;
     $self->chargeback_api_version('2.2')        unless $self->chargeback_api_version;
     $self->xmlns('http://www.litle.com/schema') unless $self->xmlns;
 }
@@ -334,11 +334,11 @@ sub test_transaction {
     $self->{'test_transaction'} = 'sandbox';
         $self->verify_SSL(0);
 
-        $self->server('www.testlitle.com');
+        $self->server('www.testvantivcnp.com');
         $self->port('443');
         $self->path('/sandbox/communicator/online');
 
-        $self->chargeback_server('service-postlive.litle.com'); # no sandbox exists, so fallback to certify
+        $self->chargeback_server('services.vantivpostlive.com'); # no sandbox exists, so fallback to certify
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif (lc($testMode) eq 'localhost') {
@@ -646,6 +646,20 @@ sub map_request {
       #warn "$trunc->[0] => ".($content->{ $trunc->[0] }||'')."\n" if $DEBUG;
     }
 
+    tie my %customer_info, 'Tie::IxHash', $self->_revmap_fields(
+        ssn                      => 'ssn',
+        dob                      => 'dob',
+        customerRegistrationDate => 'registration_date',
+        customerType             => 'customer_type',
+        incomeAmount             => 'income_amount',
+        incomeCurrency           => 'income_currency',
+        employerName             => 'employer_name',
+        customerWorkTelephone    => 'work_phone',
+        residenceStatus          => 'residence_status',
+        yearsAtResidence         => 'residence_years',
+        yearsAtEmployer          => 'employer_years',
+    );
+
     tie my %billToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
         name         => 'name',
@@ -662,13 +676,15 @@ sub map_request {
     tie my %shipToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
         name         => 'ship_name',
-        email        => 'ship_email',
         addressLine1 => 'ship_address',
+        addressLine2 => 'ship_address2',
+        addressLine3 => 'ship_address3',
         city         => 'ship_city',
         state        => 'ship_state',
         zip          => 'ship_zip',
         country      => 'ship_country'
         , #TODO: will require validation to the spec, this field wont' work as is
+        email        => 'ship_email',
         phone => 'ship_phone',
     );
 
@@ -680,9 +696,10 @@ sub map_request {
 
     tie my %custombilling, 'Tie::IxHash',
       $self->_revmap_fields(
-        content      => $content,
+        content    => $content,
         phone      => 'company_phone',
         descriptor => 'description',
+        #url        => 'url',
       );
 
     ## loop through product list and generate lineItemData for each
@@ -728,26 +745,64 @@ sub map_request {
       }
     }
 
+    tie my %filtering, 'Tie::IxHash', $self->_revmap_fields(
+        prepaid       => 'filter_prepaid',
+        international => 'filter_international',
+        chargeback    => 'filter_chargeback',
+    );
+
+    tie my %healthcaresub, 'Tie::IxHash', $self->_revmap_fields(
+        totalHealthcareAmount => 'amount_healthcare',
+        RxAmount          => 'amount_medications',
+        visionAmount      => 'amount_vision',
+        clinicOtherAmount => 'amount_clinic',
+        dentalAmount      => 'amount_dental',
+    );
+
+    tie my %healthcare, 'Tie::IxHash', $self->_revmap_fields(
+        healthcareAmounts => \%healthcaresub,
+        IIASFlag          => 'healthcare_flag',
+    );
+
+    tie my %amexaggregator, 'Tie::IxHash', $self->_revmap_fields(
+        sellerId                   => 'amex_seller_id',
+        sellerMerchantCategoryCode => 'amex_merch_code',
+    );
+
+    tie my %detailtax, 'Tie::IxHash', $self->_revmap_fields(
+        taxIncludedInTotal => 'tax_in_total',
+        taxAmount          => 'tax_amount',
+        taxRate            => 'tax_rate',
+        taxTypeIdentifier  => 'tax_type',
+        cardAcceptorTaxId  => 'tax_id',
+    );
     #
     #
     tie my %enhanceddata, 'Tie::IxHash', $self->_revmap_fields(
         content                => $content,
         customerReference      => 'po_number',
         salesTax               => 'salestax',
+        deliveryType           => 'deliverytype',
+        taxExempt              => 'tax_exempt',
         discountAmount         => 'discount',
         shippingAmount         => 'shipping',
         dutyAmount             => 'duty',
+        shipFromPostalCode     => 'company_zip',
+        destinationPostalCode  => 'ship_zip',
+        destinationCountryCode => 'ship_country',
         invoiceReferenceNumber => 'invoice_number_length_15',
         orderDate              => 'orderdate',
+        detailTax              => \%detailtax,
         lineItemData           => \@products,
     );
 
     tie my %card, 'Tie::IxHash', $self->_revmap_fields(
-        content            => $content,
-        type               => 'card_type',
-        number             => 'card_number',
-        expDate            => 'expiration',
-        cardValidationNum  => 'cvv2',
+        content           => $content,
+        type              => 'card_type',
+        number            => 'card_number',
+        expDate           => 'expiration',
+        cardValidationNum => 'cvv2',
+        pin               => 'pin',
     );
 
     tie my %token, 'Tie::IxHash', $self->_revmap_fields(
@@ -760,6 +815,15 @@ sub map_request {
     tie my %processing, 'Tie::IxHash', $self->_revmap_fields(
         content               => $content,
         bypassVelocityCheck   => 'velocity_check',
+    );
+
+    tie my %pos, 'Tie::IxHash', $self->_revmap_fields(
+        capability   => 'pos_capability',
+        entryMode    => 'pos_entry_mode',
+        cardholderId => 'pos_cardholder_id',
+        terminalId   => 'pos_terminal_id',
+        catLevel     => 'pos_cat_level',
+        #For CAT (Cardholder Activated Terminal) transactions, the capability element must be set to magstripe, the cardholderId element must be set to nopin, and the catLevel element must be set to self service.
     );
 
     tie my %cardholderauth, 'Tie::IxHash',
@@ -783,6 +847,33 @@ sub map_request {
         content      => $content,
         recycleBy    => 'recycle_by',
         recycleId    => 'recycle_id',
+      );
+
+    tie my %recurringRequest, 'Tie::IxHash',
+      $self->_revmap_fields(
+        content          => $content,
+        planCode         => 'recurring_plan_code',
+        numberOfPayments => 'recurring_number_of_payments',
+        startDate        => 'recurring_start_date',
+        amount           => 'recurring_amount',
+      );
+    
+      tie my %advancedfraud, 'Tie::IxHash',
+      $self->_revmap_fields(
+        content               => $content,
+        threatMetrixSessionId => 'threatMetrixSessionId',
+        customAttribute1      => 'advanced_fraud_customAttribute1',
+        customAttribute2      => 'advanced_fraud_customAttribute2',
+        customAttribute3      => 'advanced_fraud_customAttribute3',
+        customAttribute4      => 'advanced_fraud_customAttribute4',
+        customAttribute5      => 'advanced_fraud_customAttribute5',
+      );
+
+    tie my %wallet, 'Tie::IxHash',
+      $self->_revmap_fields(
+        content            => $content,
+        walletSourceType   => 'wallet_source_type',
+        walletSourceTypeId => 'wallet_source_type_id',
       );
 
     my %req;
@@ -818,20 +909,38 @@ sub map_request {
     elsif ( $action eq 'authorization' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
-            content       => $content,
-            orderId       => 'invoice_number',
-            amount        => 'amount',
-            orderSource   => 'orderSource',
-            billToAddress => \%billToAddress,
-            card          => $content->{'card_number'} ? \%card : {},
-            token         => $content->{'card_token'} ? \%token : {},
+            content         => $content,
+            orderId         => 'invoice_number',
+            amount          => 'amount',
+            secondaryAmount => 'secondary_amount',
+            orderSource     => 'orderSource',
+            customerInfo    => \%customer_info, #  PP only
+            billToAddress   => \%billToAddress,
+            shipToAddress   => \%shipToAddress,
+            card            => $content->{'card_number'} ? \%card : {},
+            token           => $content->{'card_token'} ? \%token : {},
 
-            #cardholderAuthentication    =>  \%cardholderauth,
-            processingInstructions  =>  \%processing,
-            customBilling => \%custombilling,
-            allowPartialAuth => 'partial_auth',
-            merchantData     => \%merchantdata,
-            recyclingRequest => \%recyclingrequest,
+            cardholderAuthentication     => \%cardholderauth,
+            processingInstructions       => \%processing,
+            pos                          => \%pos,
+            customBilling                => \%custombilling,
+            taxType                      => 'tax_type', # payment|fee
+            enhancedData                 => \%enhanceddata,
+            amexAggregatorData           => \%amexaggregator,
+            allowPartialAuth             => 'partial_auth',
+            healthcareIIAS               => \%healthcare,
+            filtering                    => \%filtering,
+            merchantData                 => \%merchantdata,
+            recyclingRequest             => \%recyclingrequest,
+            fraudFilterOverride          => 'filter_fraud_override',
+            recurringRequest             => \%recurringRequest,
+            debtRepayment                => 'debt_repayment',
+            advancedFraudChecks          => \%advancedfraud,
+            wallet                       => \%wallet,
+            processingType               => 'processing_type',
+            originalNetworkTransactionId => 'original_network_transaction_id',
+            originalTransactionAmount    => 'original_transaction_amount',
+
         );
     }
     elsif ( $action eq 'capture' ) {
@@ -920,7 +1029,7 @@ sub submit {
     warn 'Post processing: '.Dumper(\%content) if $DEBUG;
     my $post_data;
 
-    my $writer = new XML::Writer(
+    my $writer = XML::Writer->new(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -1381,7 +1490,7 @@ sub create_batch {
 
     my $post_data;
 
-    my $writer = new XML::Writer(
+    my $writer = XML::Writer->new(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -1525,7 +1634,7 @@ sub send_rfr {
     $self->_litle_init($args);
 
     my $post_data;
-    my $writer = new XML::Writer(
+    my $writer =  XML::Writer->new(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -1929,7 +2038,7 @@ sub chargeback_activity_request {
         $financials = 'false';
     }
 
-    my $writer = new XML::Writer(
+    my $writer = XML::Writer->new(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -2061,7 +2170,7 @@ sub chargeback_update_request {
       croak "Missing arg $key" unless $content{$key};
     }
 
-    my $writer = new XML::Writer(
+    my $writer = XML::Writer->new(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -2157,7 +2266,6 @@ Certain features are not yet implemented (no current personal business need), th
     Force Capture
     Capture Given Auth
     3DS
-    billMeLater
 
 =head1 BUGS
 
