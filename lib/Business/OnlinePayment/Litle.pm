@@ -647,6 +647,7 @@ sub map_request {
     }
 
     tie my %customer_info, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         ssn                      => 'ssn',
         dob                      => 'dob',
         customerRegistrationDate => 'registration_date',
@@ -746,12 +747,14 @@ sub map_request {
     }
 
     tie my %filtering, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         prepaid       => 'filter_prepaid',
         international => 'filter_international',
         chargeback    => 'filter_chargeback',
     );
 
     tie my %healthcaresub, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         totalHealthcareAmount => 'amount_healthcare',
         RxAmount          => 'amount_medications',
         visionAmount      => 'amount_vision',
@@ -760,16 +763,19 @@ sub map_request {
     );
 
     tie my %healthcare, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         healthcareAmounts => \%healthcaresub,
         IIASFlag          => 'healthcare_flag',
     );
 
     tie my %amexaggregator, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         sellerId                   => 'amex_seller_id',
         sellerMerchantCategoryCode => 'amex_merch_code',
     );
 
     tie my %detailtax, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         taxIncludedInTotal => 'tax_in_total',
         taxAmount          => 'tax_amount',
         taxRate            => 'tax_rate',
@@ -818,6 +824,7 @@ sub map_request {
     );
 
     tie my %pos, 'Tie::IxHash', $self->_revmap_fields(
+        content                  => $content,
         capability   => 'pos_capability',
         entryMode    => 'pos_entry_mode',
         cardholderId => 'pos_cardholder_id',
@@ -1490,7 +1497,7 @@ sub create_batch {
 
     my $post_data;
 
-    my $writer = XML::Writer->new(
+    my $writer = XML::Writer(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -1909,7 +1916,7 @@ sub _revmap_fields {
         %content = %{ delete( $map{'content'} ) };
     }
     else {
-        warn "WARNING: This content has not been pre-processed with map_fields";
+        warn "WARNING: This content has not been pre-processed with map_fields ";
         %content = $self->content();
     }
 
