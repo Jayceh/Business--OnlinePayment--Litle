@@ -954,11 +954,15 @@ sub map_request {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
           $self->_revmap_fields(
-            content      => $content,
-            litleTxnId   => 'order_number',
-            amount       => 'amount',
-            enhancedData => \%enhanceddata,
+              # partial is an element of the start tag, so located in the header
+            content                => $content,
+            litleTxnId             => 'order_number',
+            amount                 => 'amount',
+            surchargeAmount        => 'surcharge_amount',
+            enhancedData           => \%enhanceddata,
             processingInstructions => \%processing,
+            payPalOrderComplete    => 'paypal_order_complete',
+            pin                    => 'pin',
           );
     }
     elsif ( $action eq 'credit' ) {
@@ -967,11 +971,14 @@ sub map_request {
        if( $content->{'order_number'} ){
           push @required_fields, qw( order_number amount );
           tie %req, 'Tie::IxHash', $self->_revmap_fields(
-              content       => $content,
-              litleTxnId    => 'order_number',
-              amount        => 'amount',
-              customBilling => \%custombilling,
+              content                => $content,
+              litleTxnId             => 'order_number',
+              amount                 => 'amount',
+              secondaryAmount        => 'secondary_amount',
+              customBilling          => \%custombilling,
+              enhancedData           => \%enhanceddata,
               processingInstructions => \%processing,
+              actionReason           => 'action_reason', #  ENUM(SUSPECT_FRAUD) only option atm
           );
         }
        # ELSE it's an unlinked, which requires different data
@@ -979,15 +986,21 @@ sub map_request {
           croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
           push @required_fields, qw( invoice_number amount );
           tie %req, 'Tie::IxHash', $self->_revmap_fields(
-              content       => $content,
-              orderId       => 'invoice_number',
-              amount        => 'amount',
-              orderSource   => 'orderSource',
-              billToAddress => \%billToAddress,
-              card          => $content->{'card_number'} ? \%card : {},
-              token         => $content->{'card_token'} ? \%token : {},
-              customBilling => \%custombilling,
+              content                => $content,
+              orderId                => 'invoice_number',
+              amount                 => 'amount',
+              orderSource            => 'orderSource',
+              billToAddress          => \%billToAddress,
+              card                   => $content->{'card_number'} ? \%card : {},
+              token                  => $content->{'card_token'} ? \%token : {},
+              customBilling          => \%custombilling,
+              taxType                => 'tax_type',
+              enhancedData           => \%enhanceddata,
               processingInstructions => \%processing,
+              pos                    => \%pos,
+              amexAggregatorData     => \%amexaggregator,
+              merchantData           => \%merchantdata,
+              actionReason           => 'action_reason', # ENUM(SUSPECT_FRAUD) only option atm
           );
        }
     }
@@ -995,27 +1008,27 @@ sub map_request {
         push @required_fields, qw( order_number );
         tie %req, 'Tie::IxHash',
           $self->_revmap_fields(
-            content                 => $content,
-            litleTxnId              => 'order_number',
-            processingInstructions  =>  \%processing,
+            content                  => $content,
+            litleTxnId               => 'order_number',
+            processingInstructions   => \%processing,
           );
     }
     elsif ( $action eq 'authReversal' ) {
         push @required_fields, qw( order_number amount );
         tie %req, 'Tie::IxHash',
           $self->_revmap_fields(
-            content    => $content,
-            litleTxnId => 'order_number',
-            amount     => 'amount',
+            content                  => $content,
+            litleTxnId               => 'order_number',
+            amount                   => 'amount',
           );
     }
     elsif ( $action eq 'accountUpdate' ) {
         push @required_fields, qw( card_number expiration );
         tie %req, 'Tie::IxHash',
           $self->_revmap_fields(
-            content => $content,
-            orderId => 'customer_id',
-            card    => \%card,
+            content                  => $content,
+            orderId                  => 'customer_id',
+            card                     => \%card,
           );
     }
 
