@@ -888,44 +888,58 @@ sub map_request {
     if ( $action eq 'registerTokenRequest' ) {
         croak 'missing card_number' if length($content->{'card_number'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
-            content       => $content,
-            orderId       => 'invoice_number',
-            accountNumber => 'card_number',
+            content                      => $content,
+            orderId                      => 'invoice_number',
+            accountNumber                => 'card_number',
         );
     }
     elsif ( $action eq 'sale' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
-            content       => $content,
-            orderId       => 'invoice_number',
-            amount        => 'amount',
-            orderSource   => 'orderSource',
-            billToAddress => \%billToAddress,
-            card          => $content->{'card_number'} ? \%card : {},
-            token         => $content->{'card_token'} ? \%token : {},
-
-            #cardholderAuthentication    =>  \%cardholderauth,
-            customBilling => \%custombilling,
-            enhancedData  => \%enhanceddata,
-            processingInstructions  =>  \%processing,
-            allowPartialAuth => 'partial_auth',
-            merchantData => \%merchantdata,
-            recyclingRequest => \%recyclingrequest,
+            content                      => $content,
+            orderId                      => 'invoice_number',
+            amount                       => 'amount',
+            secondaryAmount              => 'secondary_amount',
+            orderSource                  => 'orderSource',
+            customerInfo                 => \%customer_info, #  PP only
+            billToAddress                => \%billToAddress,
+            shipToAddress                => \%shipToAddress,
+            card                         => $content->{'card_number'} ? \%card : {},
+            token                        => $content->{'card_token'} ? \%token : {},
+            cardholderAuthentication     => \%cardholderauth,
+            customBilling                => \%custombilling,
+            taxType                      => 'tax_type', # payment|fee
+            enhancedData                 => \%enhanceddata,
+            processingInstructions       => \%processing,
+            amexAggregatorData           => \%amexaggregator,
+            allowPartialAuth             => 'partial_auth',
+            healthcareIIAS               => \%healthcare,
+            filtering                    => \%filtering,
+            merchantData                 => \%merchantdata,
+            recyclingRequest             => \%recyclingrequest,
+            fraudFilterOverride          => 'filter_fraud_override',
+            recurringRequest             => \%recurringRequest,
+            debtRepayment                => 'debt_repayment',
+            advancedFraudChecks          => \%advancedfraud,
+            wallet                       => \%wallet,
+            processingType               => 'processing_type',
+            originalNetworkTransactionId => 'original_network_transaction_id',
+            originalTransactionAmount    => 'original_transaction_amount',
         );
     }
     elsif ( $action eq 'authorization' ) {
         croak 'missing card_token or card_number' if length($content->{'card_number'} || $content->{'card_token'} || '') == 0;
         tie %req, 'Tie::IxHash', $self->_revmap_fields(
-            content         => $content,
-            orderId         => 'invoice_number',
-            amount          => 'amount',
-            secondaryAmount => 'secondary_amount',
-            orderSource     => 'orderSource',
-            customerInfo    => \%customer_info, #  PP only
-            billToAddress   => \%billToAddress,
-            shipToAddress   => \%shipToAddress,
-            card            => $content->{'card_number'} ? \%card : {},
-            token           => $content->{'card_token'} ? \%token : {},
+            content                      => $content,
+            orderId                      => 'invoice_number',
+            amount                       => 'amount',
+            secondaryAmount              => 'secondary_amount',
+            orderSource                  => 'orderSource',
+            customerInfo                 => \%customer_info, #  PP only
+            billToAddress                => \%billToAddress,
+            shipToAddress                => \%shipToAddress,
+            card                         => $content->{'card_number'} ? \%card : {},
+            token                        => $content->{'card_token'} ? \%token : {},
 
             cardholderAuthentication     => \%cardholderauth,
             processingInstructions       => \%processing,
@@ -1020,6 +1034,7 @@ sub map_request {
             content                  => $content,
             litleTxnId               => 'order_number',
             amount                   => 'amount',
+            actionReason             => 'action_reason', # ENUM(SUSPECT_FRAUD) only option atm
           );
     }
     elsif ( $action eq 'accountUpdate' ) {
