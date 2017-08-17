@@ -168,6 +168,7 @@ The following actions are valid
   post authorization
   credit
   void
+  auth reversal
 
 =head1 Litle specific data
 
