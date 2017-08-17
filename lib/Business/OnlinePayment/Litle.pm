@@ -408,10 +408,10 @@ sub map_fields {
         'auth reversal'        => 'authReversal',
         'account update'       => 'accountUpdate',
         'tokenize'             => 'registerTokenRequest',
+        'force capture'        => 'force_capture',
 
         # AVS ONLY
         # Capture Given
-        # Force Capture
         #
     );
     $content->{'TransactionType'} = $actions{$action} || $action;
@@ -818,6 +818,22 @@ sub map_request {
         cardValidationNum  => 'cvv2',
     );
 
+    tie my %sepadirect, 'Tie::IxHash', $self->_revmap_fields(
+        content              => $content,
+        mandateProvider      => 'sepa_mandate_provider',
+        sequenceType         => 'sepa_sequence_type',
+        mandateReference     => 'sepa_mandate_reference',
+        mandateUrl           => 'sepa_mandate_url',
+        mandateSignatureDate => 'sepa_mandate_signature_date',
+        iban                 => 'sepa_iban',
+        preferredLanguage    => 'sepa_language',
+    );
+    
+    tie my %ideal, 'Tie::IxHash', $self->_revmap_fields(
+        content           => $content,
+        preferredLanguage => 'ideal_language',
+    );
+
     tie my %processing, 'Tie::IxHash', $self->_revmap_fields(
         content               => $content,
         bypassVelocityCheck   => 'velocity_check',
@@ -901,14 +917,18 @@ sub map_request {
             amount                       => 'amount',
             secondaryAmount              => 'secondary_amount',
             orderSource                  => 'orderSource',
-            customerInfo                 => \%customer_info, #  PP only
+            customerInfo                 => \%customer_info, # PP only
             billToAddress                => \%billToAddress,
             shipToAddress                => \%shipToAddress,
             card                         => $content->{'card_number'} ? \%card : {},
             token                        => $content->{'card_token'} ? \%token : {},
+            #[<card>|<paypage>|<token>|<paypal>|<mpos>|<applepay>|
+            #<sepaDirectDebit>|<ideal>] (Choice)
+            sepaDirectDebit              => \%sepadirect,
+            ideal                        => \%ideal,
             cardholderAuthentication     => \%cardholderauth,
             customBilling                => \%custombilling,
-            taxType                      => 'tax_type', # payment|fee
+            taxType                      => 'tax_type',      # payment|fee
             enhancedData                 => \%enhanceddata,
             processingInstructions       => \%processing,
             amexAggregatorData           => \%amexaggregator,
@@ -977,6 +997,31 @@ sub map_request {
             processingInstructions => \%processing,
             payPalOrderComplete    => 'paypal_order_complete',
             pin                    => 'pin',
+          );
+    }
+    elsif ( $action eq 'force_capture' ) {
+        ## ARE YOU SURE YOU WANT TO DO THIS?
+        # Seriously, force captures are like running up the pirate flag, check with your Vantiv rep
+        push @required_fields, qw( order_number amount );
+        tie %req, 'Tie::IxHash',
+          $self->_revmap_fields(
+              # partial is an element of the start tag, so located in the header
+            content                => $content,
+            litleTxnId             => 'order_number',
+            amount                 => 'amount',
+            secondaryAmount        => 'secondary_amount',
+            orderSource            => 'orderSource',
+            billToAddress          => \%billToAddress,
+            card                   => $content->{'card_number'} ? \%card : {},
+            token                  => $content->{'card_token'} ? \%token : {},
+            customBilling          => \%custombilling,
+            taxType                => 'tax_type',      # payment|fee
+            enhancedData           => \%enhanceddata,
+            processingInstructions => \%processing,
+            amexAggregatorData     => \%amexaggregator,
+            merchantData           => \%merchantdata,
+            debtRepayment          => 'debt_repayment',
+            processingType         => 'processing_type',
           );
     }
     elsif ( $action eq 'credit' ) {
@@ -2298,9 +2343,7 @@ sub chargeback_update_request {
 
 Certain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
 
-    Force Capture
     Capture Given Auth
-    3DS
 
 =head1 BUGS
 
@@ -2319,6 +2362,10 @@ You can find documentation for this module with the perldoc command.
 You can also look for information at:
 
 L<http://www.vantiv.com/>
+
+=head1 SPEC
+
+Documentation and specs are available on github at L<http://litleco.github.io/>
 
 =over 4
 
