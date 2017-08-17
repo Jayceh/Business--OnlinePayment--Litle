@@ -99,6 +99,7 @@ The following actions are valid
   post authorization
   credit
   void
+  auth reversal
 
 =head2 Fields
 
@@ -375,6 +376,8 @@ Return a arrayref that contains a list of Business::OnlinePayment::Litle::Charge
  $tx->phoenixTxnId(); # Unique identifier provided by Litle.
  $tx->is_success(); # Boolean, did the request work
 
+=for html <a href="https://travis-ci.org/Jayceh/Business--OnlinePayment--Litle"><img src="https://travis-ci.org/Jayceh/Business--OnlinePayment--Litle.svg?branch=master"></a>
+
 =head1 METHODS AND FUNCTIONS
 
 See L<Business::OnlinePayment> for the complete list. The following methods either override the methods in L<Business::OnlinePayment> or provide additional functions.
@@ -415,6 +418,10 @@ number as the first parameter and should return the masked version.
 Certain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
 
     Capture Given Auth
+    applepay
+    paypage
+
+    return objects for bounce pages (sepa|ideal)
 
 =head1 BUGS
 

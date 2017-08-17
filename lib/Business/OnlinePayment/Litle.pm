@@ -28,6 +28,8 @@ $DEBUG   = 0;
 
 # ABSTRACT: Business::OnlinePayment::Litle - Vantiv (was Litle & Co.) Backend for Business::OnlinePayment
 
+=for html <a href="https://travis-ci.org/Jayceh/Business--OnlinePayment--Litle"><img src="https://travis-ci.org/Jayceh/Business--OnlinePayment--Litle.svg?branch=master"></a>
+
 =head1 SYNOPSIS
 
 This is a plugin for the Business::OnlinePayment interface.  Please refer to that documentation for general usage, and here for Vantiv specific usage.
@@ -2345,6 +2347,10 @@ sub chargeback_update_request {
 Certain features are not yet implemented (no current personal business need), though the capability of support is there, and the test data for the verification suite is there.
 
     Capture Given Auth
+    applepay
+    paypage
+
+    return objects for bounce pages (sepa|ideal)
 
 =head1 BUGS
 
