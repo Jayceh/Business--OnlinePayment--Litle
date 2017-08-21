@@ -16,7 +16,7 @@ use Tie::IxHash;
 use Business::CreditCard qw(cardtype);
 use Data::Dumper;
 use IO::String;
-use Carp qw(croak);
+use Carp qw(croak carp);
 use Log::Scrubber qw(disable $SCRUBBER scrubber :Carp scrubber_add_scrubber);
 
 @ISA     = qw(Business::OnlinePayment::HTTPS);
@@ -296,7 +296,7 @@ sub set_defaults {
     if( defined $_defaults{'Scrubber'} ) {
         my $code = $_defaults{'Scrubber'};
         if( ref($code) ne 'CODE' ) {
-            warn('default_Scrubber is not a code ref');
+            carp('default_Scrubber is not a code ref');
         }
         else {
             $self->{_scrubber} = $code;
