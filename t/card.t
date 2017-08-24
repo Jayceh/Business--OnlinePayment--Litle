@@ -264,6 +264,14 @@ SKIP: {
         $content{'amount'} = $account->{'Amount'};
         $content{'invoice_number'} = time;
         $content{'order_number'} = $auth_resp{ $account->{'OrderId'} };
+        my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
+        $content{'name'} = $address->{'Name'};
+        $content{'address'} = $address->{'Address1'};
+        $content{'address2'} = $address->{'Address2'};
+        $content{'city'} = $address->{'City'};
+        $content{'state'} = $address->{'State'};
+        $content{'state'} = $address->{'State'};
+        $content{'zip'} = $address->{'Zip'};
 
         ## get the response validation set for this order
         my ($resp_validation) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'capture'} };
@@ -498,7 +506,7 @@ sub tx_check {
     my $tx = shift;
     my %o  = @_;
 
-    $tx->test_transaction(1);
+    $tx->test_transaction("prelive");
     $tx->submit;
 
     is( $tx->is_success,    $o{is_success},    "$o{desc}: " . tx_info($tx) );
@@ -777,79 +785,79 @@ $data= {
                            'CardType' => 'VI',
                            'OrderId' => '1',
                            'AccountNumber' => '4457010000000009',
-                           'ExpDate' => '0112',
+                           'ExpDate' => '0121',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '349'
                          },
                          {
-                           'Amount' => '200.20',
+                           'Amount' => '101.00',
                            'CardType' => 'MC',
                            'OrderId' => '2',
                            'AccountNumber' => '5112010000000003',
-                           'ExpDate' => '0212',
+                           'ExpDate' => '0221',
                            'CardholderAuthentication' => 'BwABBJQ1AgAAAAAgJDUCAAAAAAA=',
                            'CardValidation' => '261'
                          },
                          {
-                           'Amount' => '300.30',
+                           'Amount' => '101.00',
                            'CardType' => 'DI',
                            'OrderId' => '3',
                            'AccountNumber' => '6011010000000003',
-                           'ExpDate' => '0312',
+                           'ExpDate' => '0321',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '758'
                          },
                          {
-                           'Amount' => '400.40',
+                           'Amount' => '101.00',
                            'CardType' => 'AX',
                            'OrderId' => '4',
                            'AccountNumber' => '375001000000005',
-                           'ExpDate' => '0412',
+                           'ExpDate' => '0421',
                            'CardholderAuthentication' => '',
-                           'CardValidation' => 'blank'
+                           'CardValidation' => ''
                          },
                          {
-                           'Amount' => '500.50',
+                           'Amount' => '101.00',
                            'CardType' => 'VI',
                            'OrderId' => '5',
-                           'AccountNumber' => '4457010200000007',
-                           'ExpDate' => '0512',
+                           'AccountNumber' => '4100200300011001',
+                           'ExpDate' => '0521',
                            'CardholderAuthentication' => 'BwABBJQ1AgAAAAAgJDUCAAAAAAA=',
                            'CardValidation' => '463'
                          },
                          {
-                           'Amount' => '600.60',
+                           'Amount' => '101.00',
                            'CardType' => 'VI',
                            'OrderId' => '6',
                            'AccountNumber' => '4457010100000008',
-                           'ExpDate' => '0612',
+                           'ExpDate' => '0621',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '992'
                          },
                          {
-                           'Amount' => '700.70',
+                           'Amount' => '101.00',
                            'CardType' => 'MC',
                            'OrderId' => '7',
                            'AccountNumber' => '5112010100000002',
-                           'ExpDate' => '0712',
+                           'ExpDate' => '0721',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '251'
                          },
                          {
-                           'Amount' => '800.80',
+                           'Amount' => '101.00',
                            'CardType' => 'DI',
                            'OrderId' => '8',
                            'AccountNumber' => '6011010100000002',
-                           'ExpDate' => '0812',
+                           'ExpDate' => '0821',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '184'
                          },
                          {
-                           'Amount' => '900.90',
+                           'Amount' => '101.00',
                            'CardType' => 'AX',
                            'OrderId' => '9',
                            'AccountNumber' => '375001010000003',
-                           'ExpDate' => '0912',
+                           'ExpDate' => '0921',
                            'CardholderAuthentication' => '',
                            'CardValidation' => '0421'
                          }
