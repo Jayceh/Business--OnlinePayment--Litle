@@ -6,6 +6,7 @@ use Test::More qw(no_plan);
 my $login = $ENV{'BOP_USERNAME'} ? $ENV{'BOP_USERNAME'} : 'TESTMERCHANT';
 my $password = $ENV{'BOP_PASSWORD'} ? $ENV{'BOP_PASSWORD'} : 'TESTPASS';
 my $merchantid = $ENV{'BOP_MERCHANTID'} ? $ENV{'BOP_MERCHANTID'} : 'TESTMERCHANTID';
+my $env = $ENV{'BOP_TEST_ENV'} ? $ENV{'BOP_TEST_ENV'} : 'prelive'; # prelive for certification testing
 my @opts = ('default_Origin' => 'RECURRING' );
 
 ## grab test info from the storable^H^H yeah actually just DATA now
@@ -65,22 +66,22 @@ my %orig_content = (
     {   description =>  'First Product',
         quantity    =>  1,
         units       =>  'Months',
-        amount      =>  500,
+        amount      =>  "5.00",
         discount    =>  0,
         code        =>  1,
-        cost        =>  500,
+        cost        =>  "5.00",
         tax         =>  0,
-        totalwithtax => 500,
+        totalwithtax => "5.00",
     },
     {   description =>  'Second Product',
         quantity    =>  1,
         units       =>  'Months',
-        amount      =>  1500,
+        amount      =>  "96.00",
         discount    =>  0,
         code        =>  2,
-        cost        =>  500,
+        cost        =>  "96.00",
         tax         =>  0,
-        totalwithtax => 1500,
+        totalwithtax => "96.00",
     }
 
     ],
@@ -267,9 +268,8 @@ SKIP: {
         my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
         $content{'name'} = $address->{'Name'};
         $content{'address'} = $address->{'Address1'};
-        $content{'address2'} = $address->{'Address2'};
+        $content{'address2'} //= $address->{'Address2'};
         $content{'city'} = $address->{'City'};
-        $content{'state'} = $address->{'State'};
         $content{'state'} = $address->{'State'};
         $content{'zip'} = $address->{'Zip'};
 
@@ -311,9 +311,8 @@ SKIP: {
         my ($address) = grep { $_->{'OrderId'} ==  $account->{'OrderId'} } @{ $data->{'address'} };
         $content{'name'} = $address->{'Name'};
         $content{'address'} = $address->{'Address1'};
-        $content{'address2'} = $address->{'Address2'};
+        $content{'address2'} //= $address->{'Address2'};
         $content{'city'} = $address->{'City'};
-        $content{'state'} = $address->{'State'};
         $content{'state'} = $address->{'State'};
         $content{'zip'} = $address->{'Zip'};
 
@@ -365,7 +364,7 @@ SKIP: {
         }
     }
 }
-    
+
 
 print '-'x70;
 print "VOID\n";
@@ -506,7 +505,7 @@ sub tx_check {
     my $tx = shift;
     my %o  = @_;
 
-    $tx->test_transaction("prelive");
+    $tx->test_transaction($env);
     $tx->submit;
 
     is( $tx->is_success,    $o{is_success},    "$o{desc}: " . tx_info($tx) );
