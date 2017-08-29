@@ -334,7 +334,7 @@ sub test_transaction {
     if (! defined $testMode) { $testMode = $self->{'test_transaction'} || 0; }
 
     if (lc($testMode) eq 'sandbox') {
-    $self->{'test_transaction'} = 'sandbox';
+        $self->{'test_transaction'} = 'sandbox';
         $self->verify_SSL(0);
 
         $self->server('www.testvantivcnp.com');
@@ -346,7 +346,7 @@ sub test_transaction {
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif (lc($testMode) eq 'localhost') {
         # this allows the user to create a local web server to do generic testing with
-    $self->{'test_transaction'} = 'localhost';
+        $self->{'test_transaction'} = 'localhost';
         $self->verify_SSL(0);
 
         $self->server('localhost');
@@ -357,7 +357,7 @@ sub test_transaction {
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif (lc($testMode) eq 'prelive') {
-    $self->{'test_transaction'} = $testMode;
+        $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
         $self->server('payments.vantivprelive.com');
@@ -368,7 +368,7 @@ sub test_transaction {
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } elsif ($testMode) {
-    $self->{'test_transaction'} = $testMode;
+        $self->{'test_transaction'} = $testMode;
         $self->verify_SSL(0);
 
         $self->server('payments.vantivpostlive.com');
@@ -379,7 +379,7 @@ sub test_transaction {
         $self->chargeback_port('443');
         $self->chargeback_path('/services/communicator/chargebacks/webCommunicator');
     } else {
-    $self->{'test_transaction'} = 0;
+        $self->{'test_transaction'} = 0;
         $self->verify_SSL(1);
 
         $self->server('payments.vantivcnp.com');
@@ -667,13 +667,14 @@ sub map_request {
     tie my %billToAddress, 'Tie::IxHash', $self->_revmap_fields(
         content      => $content,
         name         => 'name',
-        email        => 'email',
         addressLine1 => 'address',
+        addressLine2 => 'address2',
+        addressLine3 => 'address3',
         city         => 'city',
         state        => 'state',
         zip          => 'zip',
-        country      => 'country'
-        , #TODO: will require validation to the spec, this field wont' work as is
+        country      => 'country',
+        email        => 'email',
         phone => 'phone',
     );
 
