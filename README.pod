@@ -6,7 +6,7 @@ Business::OnlinePayment::Litle - Business::OnlinePayment::Litle - Vantiv (was Li
 
 =head1 VERSION
 
-version 0.958
+version 0.959
 
 =head1 SYNOPSIS
 

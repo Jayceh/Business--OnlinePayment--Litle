@@ -1574,7 +1574,7 @@ sub create_batch {
 
     my $post_data;
 
-    my $writer = XML::Writer(
+    my $writer = XML::Writer->new(
         OUTPUT      => \$post_data,
         DATA_MODE   => 1,
         DATA_INDENT => 2,
@@ -1645,7 +1645,7 @@ sub create_batch {
           "$filename.asc" ) #once complete, you rename it, for pickup
           or $self->die("Cannot RENAME file", $sftp->error);
         $self->is_success(1);
-        $self->server_response( $sftp->message );
+        $self->server_response( $sftp->error );
     }
     elsif ( $opts{'method'} && $opts{'method'} eq 'https' ) {    #https post
         $self->port('15000');
