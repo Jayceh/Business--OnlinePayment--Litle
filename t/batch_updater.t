@@ -49,7 +49,7 @@ SKIP: {
 
         $tx->add_item(\%content);
     }
-    ok($tx->create_batch(
+    is($tx->create_batch(
         method => 'sftp',
         login           => $login,
         password        => $password,
@@ -58,7 +58,7 @@ SKIP: {
         ftp_username    => $ftp_user,
         ftp_password    => $ftp_pass,
 #        #sftp_hosts_file => '/var/card_server/conf/known_hosts',  #how do we handle this in the test?
-    ));
+    ), 0, "Uploaded Batch");
 
 }
 
